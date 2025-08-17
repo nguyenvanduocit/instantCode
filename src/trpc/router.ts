@@ -34,10 +34,14 @@ export const appRouter = router({
   sendMessage: publicProcedure
     .input(StructuredMessageSchema)
     .subscription(async function* ({ input, signal }) {
+      const subscriptionId = Math.random().toString(36).substring(7)
+      console.log(`🔵 [SERVER] New subscription created: ${subscriptionId} for session: ${input.sessionId || 'new'}`)
+      
       yield {
         type: 'connection',
         message: 'Connected to Frontend Context',
       } as SendMessageResponse
+      console.log(`📤 [SERVER ${subscriptionId}] Sent connection message`)
 
       const componentLocations = extractComponentLocationsFromElements(input.selectedElements)
       const formattedPrompt = formatAIPrompt(input.userPrompt, input.selectedElements, input.pageInfo)
@@ -51,26 +55,32 @@ export const appRouter = router({
       console.log('Extracted component locations:', componentLocations)
 
       if (componentLocations.length > 0) {
-        yield {
+        const progressMsg = {
           type: 'progress',
           message: `Found ${componentLocations.length} component(s)`,
           componentLocations,
         } as SendMessageResponse
+        yield progressMsg
+        console.log(`📤 [SERVER ${subscriptionId}] Sent progress message: Found ${componentLocations.length} component(s)`)
       } else {
-        yield {
+        const progressMsg = {
           type: 'progress',
           message: 'No component locations found in elements',
         } as SendMessageResponse
+        yield progressMsg
+        console.log(`📤 [SERVER ${subscriptionId}] Sent progress message: No components found`)
       }
 
       // Process with Claude Code
       let currentSessionId: string | undefined = input.sessionId
 
       try {
-        yield {
+        const processingMsg = {
           type: 'progress',
           message: 'Processing with Claude...',
         } as SendMessageResponse
+        yield processingMsg
+        console.log(`📤 [SERVER ${subscriptionId}] Sent processing message`)
 
         const abortController = new AbortController()
         
@@ -113,12 +123,14 @@ export const appRouter = router({
           }
 
           // Stream all Claude Code messages as JSON to the toolbar
-          yield {
+          const claudeMsg = {
             type: 'claude_json',
             message: 'Claude Code message',
             claudeJson: message,
             sessionId: currentSessionId,
           } as SendMessageResponse
+          yield claudeMsg
+          console.log(`📤 [SERVER ${subscriptionId}] Sent claude_json message: ${message.type}`)
 
           if (message.type === "result" && !message.is_error) {
             yield {
@@ -135,17 +147,19 @@ export const appRouter = router({
           }
         }
 
-        yield {
+        const completeMsg = {
           type: 'complete',
           message: 'Message processed successfully',
           prompt: formattedPrompt,
           componentLocations,
           sessionId: currentSessionId,
         } as SendMessageResponse
+        yield completeMsg
+        console.log(`📤 [SERVER ${subscriptionId}] Sent completion message`)
       } catch (error) {
         // Check if the error is due to cancellation
         if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('aborted'))) {
-          console.log('Claude processing was cancelled')
+          console.log(`🚫 [SERVER ${subscriptionId}] Claude processing was cancelled`)
           yield {
             type: 'progress',
             message: 'Request was cancelled',
@@ -158,8 +172,9 @@ export const appRouter = router({
             componentLocations,
             sessionId: currentSessionId,
           } as SendMessageResponse
+          console.log(`📤 [SERVER ${subscriptionId}] Sent cancellation messages`)
         } else {
-          console.error('Claude processing error:', error)
+          console.error(`❌ [SERVER ${subscriptionId}] Claude processing error:`, error)
           yield {
             type: 'progress',
             message: 'Error processing with Claude: ' + (error as Error).message,
@@ -172,8 +187,11 @@ export const appRouter = router({
             componentLocations,
             sessionId: currentSessionId,
           } as SendMessageResponse
+          console.log(`📤 [SERVER ${subscriptionId}] Sent error messages`)
         }
       }
+      
+      console.log(`🔴 [SERVER] Subscription ${subscriptionId} ended`)
     }),
 
   processElements: publicProcedure

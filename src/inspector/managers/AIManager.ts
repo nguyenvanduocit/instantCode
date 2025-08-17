@@ -29,6 +29,7 @@ export class AIManager {
   private wsClient: ReturnType<typeof createWSClient> | null = null
   private currentSubscription: any = null
   private globalSessionId: string | null = null
+  private clientId: string = Math.random().toString(36).substring(7)
 
   initialize(aiEndpoint: string): void {
     if (!aiEndpoint) return
@@ -78,10 +79,12 @@ export class AIManager {
 
     // Cancel any existing subscription to prevent duplicates
     if (this.currentSubscription) {
-      console.log('Cancelling existing subscription before creating new one')
+      console.log(`🟡 [CLIENT ${this.clientId}] Cancelling existing subscription before creating new one`)
       this.currentSubscription.unsubscribe()
       this.currentSubscription = null
     }
+    
+    console.log(`🟢 [CLIENT ${this.clientId}] Creating new subscription for prompt: "${userPrompt.substring(0, 30)}..."`)
 
     const structuredInput: SendMessageInput = {
       userPrompt,
@@ -96,7 +99,7 @@ export class AIManager {
       structuredInput,
       {
         onData: (data) => {
-          console.log('SSE data received:', data)
+          console.log(`📥 [CLIENT ${this.clientId}] SSE data received:`, data)
           
           // Update global session ID when received in response
           if ((data.type === 'claude_json' || data.type === 'claude_response' || data.type === 'complete') && data.sessionId) {
@@ -107,13 +110,13 @@ export class AIManager {
           handler.onData(data)
           
           if (data.type === 'complete') {
-            console.log('AI request completed with session ID:', data.sessionId)
+            console.log(`✅ [CLIENT ${this.clientId}] AI request completed with session ID:`, data.sessionId)
             this.currentSubscription = null
             handler.onComplete()
           }
         },
         onError: (error) => {
-          console.error('Subscription error:', error)
+          console.error(`❌ [CLIENT ${this.clientId}] Subscription error:`, error)
           this.currentSubscription = null
           handler.onError(error)
         },

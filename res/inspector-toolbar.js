@@ -2853,6 +2853,7 @@
       this.wsClient = null;
       this.currentSubscription = null;
       this.globalSessionId = null;
+      this.clientId = Math.random().toString(36).substring(7);
     }
     initialize(aiEndpoint) {
       if (!aiEndpoint) return;
@@ -2886,10 +2887,11 @@
         throw new Error("tRPC client not initialized");
       }
       if (this.currentSubscription) {
-        console.log("Cancelling existing subscription before creating new one");
+        console.log(`\u{1F7E1} [CLIENT ${this.clientId}] Cancelling existing subscription before creating new one`);
         this.currentSubscription.unsubscribe();
         this.currentSubscription = null;
       }
+      console.log(`\u{1F7E2} [CLIENT ${this.clientId}] Creating new subscription for prompt: "${userPrompt.substring(0, 30)}..."`);
       const structuredInput = {
         userPrompt,
         selectedElements,
@@ -2901,20 +2903,20 @@
         structuredInput,
         {
           onData: (data) => {
-            console.log("SSE data received:", data);
+            console.log(`\u{1F4E5} [CLIENT ${this.clientId}] SSE data received:`, data);
             if ((data.type === "claude_json" || data.type === "claude_response" || data.type === "complete") && data.sessionId) {
               this.globalSessionId = data.sessionId;
               console.log("Session ID updated:", this.globalSessionId);
             }
             handler.onData(data);
             if (data.type === "complete") {
-              console.log("AI request completed with session ID:", data.sessionId);
+              console.log(`\u2705 [CLIENT ${this.clientId}] AI request completed with session ID:`, data.sessionId);
               this.currentSubscription = null;
               handler.onComplete();
             }
           },
           onError: (error) => {
-            console.error("Subscription error:", error);
+            console.error(`\u274C [CLIENT ${this.clientId}] Subscription error:`, error);
             this.currentSubscription = null;
             handler.onError(error);
           }
