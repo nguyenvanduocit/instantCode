@@ -3,14 +3,10 @@
  */
 
 import type { ElementData, PageInfo, SendMessageResponse } from './shared/types'
-import { ElementSelectionManager } from './inspector/managers/ElementSelectionManager'
-import { AIManager, type AIMessageHandler } from './inspector/managers/AIManager'
-import { InspectionManager } from './inspector/managers/InspectionManager'
-import { ComponentDetector } from './inspector/detectors/ComponentDetector'
-import { UIRenderer } from './inspector/ui/UIRenderer'
-import { MessageFormatter } from './inspector/formatters/MessageFormatter'
-import { ToolbarEventEmitter } from './inspector/events/ToolbarEvents'
-import { ToolbarStateManager } from './inspector/managers/ToolbarStateManager'
+import { ElementSelectionManager, AIManager, InspectionManager, ToolbarStateManager, type AIMessageHandler } from './inspector/managers'
+import { ComponentDetector } from './inspector/detectors'
+import { UIRenderer, MessageFormatter } from './inspector/ui'
+import { ToolbarEventEmitter } from './inspector/events'
 
 export class InspectorToolbar extends HTMLElement {
   // Event-driven architecture
@@ -210,8 +206,8 @@ export class InspectorToolbar extends HTMLElement {
         if (this.inspectionManager.isInInspectionMode()) {
           this.events.emit('ui:exit-inspection', undefined)
         }
+        // Don't clear messages when just collapsing - only clear selection and prompt
         this.events.emit('selection:clear', undefined)
-        this.events.emit('messages:clear', undefined)
         this.events.emit('prompt:clear', undefined)
       }
     })
@@ -263,11 +259,25 @@ export class InspectorToolbar extends HTMLElement {
     })
 
     // Cancel button
-    cancelButton?.addEventListener('click', () => {
+    cancelButton?.addEventListener('click', async () => {
       if (this.aiManager.isProcessing()) {
         this.aiManager.cancel()
         this.setProcessingState(false)
         this.showNotification('Request cancelled', 'success')
+        
+        // Start new chat after canceling
+        if (promptInput) promptInput.value = ''
+        this.selectionManager.clearAllSelections()
+        this.clearJsonDisplay()
+        
+        if (this.aiManager.isInitialized()) {
+          try {
+            await this.aiManager.newChat()
+            this.events.emit('session:updated', { sessionId: this.aiManager.getSessionId() })
+          } catch (error) {
+            console.error('Failed to start new chat after cancel:', error)
+          }
+        }
       }
     })
 

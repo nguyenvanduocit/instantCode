@@ -15,6 +15,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Testing & Validation
 - **Type check without building**: `bunx tsc --noEmit`
+- **Lint and format**: Use `bun run typecheck` to verify TypeScript compilation
 - **Check port availability**: The server automatically checks if port 7318 is available before starting
 
 ## Architecture
@@ -66,6 +67,13 @@ Default port 7318 with automatic availability checking. Server exits gracefully 
   - **index.ts**: Entry point managing server lifecycle
   - **trpc-server.ts**: Express + tRPC + WebSocket server configuration
   - **inspector-toolbar.ts**: Browser component source (compiled to res/inspector-toolbar.js)
+  - **inspector/**: Simplified browser component architecture
+    - **managers.ts**: State management, AI communication, element selection, and inspection
+    - **detectors.ts**: Framework detection logic (React, Vue, Angular, Svelte)
+    - **events.ts**: Event system using mitt for component communication
+    - **ui.ts**: UI rendering, styling, and message formatting
+  - **utils/**: Common utilities for HTML manipulation and XPath generation
+  - **shared/**: Common schemas and types used by both server and client
 **res/**: Static resources including the browser-side inspector component
   - **inspector-toolbar.js**: Compiled Web Component with tRPC client integration
 **dist/**: Generated JavaScript output for server (created by build, ignored by git)
@@ -78,3 +86,33 @@ The project uses a dual build system:
 - **Browser Component**: esbuild compilation of inspector-toolbar.ts to a browser-compatible IIFE bundle
 
 The project uses Bun exclusively for both development and production, leveraging its fast TypeScript execution and built-in tooling.
+
+## Environment Variables
+
+- **PORT**: Server port (default: 7318)
+- **NODE_ENV**: Environment mode (affects error handling and logging)
+
+## Integration Usage
+
+To integrate the inspector toolbar with a frontend application:
+```html
+<!-- Auto-injection with optional project context -->
+<script src="http://localhost:7318/inspector-toolbar.js?autoInject&cwd=/path/to/project"></script>
+
+<!-- Manual integration -->
+<script src="http://localhost:7318/inspector-toolbar.js"></script>
+<script>
+  const toolbar = document.createElement('inspector-toolbar');
+  toolbar.setAttribute('ai-endpoint', 'http://localhost:7318');
+  toolbar.setAttribute('cwd', '/path/to/project');
+  document.body.prepend(toolbar);
+</script>
+```
+
+## Key Development Notes
+
+- **TypeScript configuration**: Server code excludes `inspector-toolbar.ts` from compilation (handled by esbuild)
+- **Schema definitions**: All tRPC schemas and types are centralized in `src/shared/schemas.ts` for consistency
+- **Session management**: Claude Code sessions can be resumed using session IDs for continuous conversations
+- **Component detection**: Automatically extracts file locations from framework-specific DOM attributes
+- **Error handling**: Comprehensive error handling with graceful degradation and user feedback

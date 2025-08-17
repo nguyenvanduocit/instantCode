@@ -1,5 +1,5 @@
 /**
- * Detects framework components and their file locations
+ * Framework component detection and file location extraction
  */
 
 export interface ComponentInfo {

@@ -4,7 +4,7 @@
  */
 
 import mitt, { type Emitter } from 'mitt'
-import type { ElementData, SendMessageResponse } from '../../shared/types'
+import type { ElementData, SendMessageResponse } from '../shared/types'
 
 export type ToolbarInternalEvents = {
   // UI State Events

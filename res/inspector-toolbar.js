@@ -1,288 +1,5 @@
 "use strict";
 (() => {
-  // src/inspector/utils/xpath.ts
-  var XPathUtils = class {
-    static generateXPath(element) {
-      if (!element) return "";
-      if (element === document.body) return "//body";
-      if (element === document.documentElement) return "/html";
-      const steps = [];
-      let contextNode = element;
-      while (contextNode) {
-        const step = this.getXPathStep(contextNode, contextNode === element);
-        if (!step.value) break;
-        steps.push(step.value);
-        if (step.optimized) break;
-        const parent = contextNode.parentNode;
-        if (!parent || parent.nodeType === Node.DOCUMENT_NODE) break;
-        contextNode = parent;
-      }
-      steps.reverse();
-      return (steps.length && steps[0].includes("@id") ? "" : "/") + steps.join("/");
-    }
-    static getXPathStep(node, isTargetNode) {
-      if (node.nodeType !== Node.ELEMENT_NODE) {
-        return { value: "", optimized: false };
-      }
-      const id = node.getAttribute("id");
-      if (id && this.isValidId(id)) {
-        if (document.querySelectorAll(`#${CSS.escape(id)}`).length === 1) {
-          return {
-            value: `//*[@id="${id}"]`,
-            optimized: true
-          };
-        }
-      }
-      const nodeName = node.nodeName.toLowerCase();
-      if (nodeName === "body" || nodeName === "head" || nodeName === "html") {
-        return {
-          value: nodeName,
-          optimized: true
-        };
-      }
-      const ownIndex = this.getXPathIndex(node);
-      if (ownIndex === -1) {
-        return { value: "", optimized: false };
-      }
-      let ownValue = nodeName;
-      if (isTargetNode && nodeName === "input" && node.getAttribute("type") && !id && !node.getAttribute("class")) {
-        ownValue += `[@type="${node.getAttribute("type")}"]`;
-      }
-      if (ownIndex > 0) {
-        ownValue += `[${ownIndex + 1}]`;
-      }
-      return {
-        value: ownValue,
-        optimized: false
-      };
-    }
-    static getXPathIndex(node) {
-      const siblings = node.parentNode?.children;
-      if (!siblings) return 0;
-      const areNodesSimilar = (left, right) => {
-        if (left === right) return true;
-        return left.nodeName.toLowerCase() === right.nodeName.toLowerCase();
-      };
-      let hasSameNamedElements = false;
-      for (let i = 0; i < siblings.length; ++i) {
-        if (areNodesSimilar(node, siblings[i]) && siblings[i] !== node) {
-          hasSameNamedElements = true;
-          break;
-        }
-      }
-      if (!hasSameNamedElements) return 0;
-      let ownIndex = 0;
-      for (let i = 0; i < siblings.length; ++i) {
-        if (areNodesSimilar(node, siblings[i])) {
-          if (siblings[i] === node) {
-            return ownIndex;
-          }
-          ++ownIndex;
-        }
-      }
-      return -1;
-    }
-    static isValidId(id) {
-      return Boolean(id) && /^\S.*$/.test(id) && !/[[\](){}<>]/.test(id);
-    }
-  };
-
-  // src/inspector/managers/ElementSelectionManager.ts
-  var ElementSelectionManager = class {
-    constructor() {
-      this.selectedElements = /* @__PURE__ */ new Map();
-      this.badges = /* @__PURE__ */ new Map();
-      this.colorIndex = 0;
-      this.colors = [
-        "#FF6B6B",
-        "#FF9671",
-        "#FFA75F",
-        "#F9D423",
-        "#FECA57",
-        "#FF9FF3",
-        "#FF7E67",
-        "#FF8C42",
-        "#FFC857",
-        "#FFA26B"
-      ];
-    }
-    selectElement(element, componentFinder) {
-      const color = this.colors[this.colorIndex % this.colors.length];
-      const index = this.selectedElements.size + 1;
-      this.colorIndex++;
-      element.style.outline = `3px solid ${color}`;
-      element.style.outlineOffset = "-1px";
-      const badge = this.createBadge(index, color, element, componentFinder);
-      this.badges.set(element, badge);
-      this.selectedElements.set(element, {
-        color,
-        originalOutline: element.style.outline,
-        originalOutlineOffset: element.style.outlineOffset,
-        index
-      });
-    }
-    deselectElement(element) {
-      const elementData = this.selectedElements.get(element);
-      if (elementData) {
-        ;
-        element.style.outline = "";
-        element.style.outlineOffset = "";
-        const badge = this.badges.get(element);
-        if (badge) {
-          badge.remove();
-          this.badges.delete(element);
-        }
-        this.selectedElements.delete(element);
-        this.reindexElements();
-      }
-    }
-    clearAllSelections() {
-      this.selectedElements.forEach((_, element) => {
-        ;
-        element.style.outline = "";
-        element.style.outlineOffset = "";
-      });
-      this.badges.forEach((badge) => badge.remove());
-      this.badges.clear();
-      this.selectedElements.clear();
-      this.colorIndex = 0;
-    }
-    hasElement(element) {
-      return this.selectedElements.has(element);
-    }
-    getSelectedElements() {
-      return this.selectedElements;
-    }
-    getSelectedCount() {
-      return this.selectedElements.size;
-    }
-    findSelectedParent(element) {
-      let currentElement = element.parentElement;
-      while (currentElement && currentElement !== document.body) {
-        if (this.selectedElements.has(currentElement)) {
-          return currentElement;
-        }
-        currentElement = currentElement.parentElement;
-      }
-      return null;
-    }
-    findSelectedChildren(element) {
-      const children = [];
-      this.selectedElements.forEach((_, selectedElement) => {
-        if (element.contains(selectedElement) && selectedElement !== element) {
-          children.push(selectedElement);
-        }
-      });
-      return children;
-    }
-    buildHierarchicalStructure(componentFinder) {
-      const rootElements = [];
-      this.selectedElements.forEach((_, element) => {
-        if (!this.findSelectedParent(element)) {
-          rootElements.push(element);
-        }
-      });
-      const buildElementInfo = (element) => {
-        const data = this.selectedElements.get(element);
-        const children = this.findSelectedChildren(element);
-        const componentData = componentFinder?.(element);
-        const elementInfo = {
-          index: data.index,
-          tagName: element.tagName,
-          xpath: XPathUtils.generateXPath(element),
-          textContent: element.textContent?.substring(0, 100) || "",
-          attributes: Array.from(element.attributes).reduce((acc, attr) => {
-            if (attr.name !== "style") {
-              acc[attr.name] = attr.value;
-            }
-            return acc;
-          }, {}),
-          children: []
-        };
-        if (componentData) {
-          elementInfo.componentData = componentData;
-        }
-        const directChildren = children.filter(
-          (child) => this.findSelectedParent(child) === element
-        );
-        directChildren.forEach((child) => {
-          elementInfo.children.push(buildElementInfo(child));
-        });
-        return elementInfo;
-      };
-      return rootElements.map((element) => buildElementInfo(element));
-    }
-    createBadge(index, color, element, componentFinder) {
-      const badge = document.createElement("div");
-      badge.classList.add("inspector-badge");
-      const shadow = badge.attachShadow({ mode: "open" });
-      const style = document.createElement("style");
-      style.textContent = `
-      .badge {
-        height: 20px;
-        padding: 0 5px;
-        background-color: ${color};
-        color: white;
-        border-radius: 4px;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-size: 11px;
-        font-weight: bold;
-        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        pointer-events: none;
-      }
-    `;
-      const badgeContent = document.createElement("div");
-      badgeContent.classList.add("badge", "inspector-ignore");
-      const component = componentFinder?.(element);
-      if (component && component.componentLocation) {
-        const componentPath = component.componentLocation.split("@")[0];
-        const fileName = componentPath.split("/").pop();
-        badgeContent.textContent = `(${index}) [${fileName}]`;
-      } else {
-        badgeContent.textContent = `(${index}) ${element.tagName}`;
-      }
-      shadow.appendChild(style);
-      shadow.appendChild(badgeContent);
-      const topMargin = -15;
-      const leftMargin = 7;
-      const rect = element.getBoundingClientRect();
-      badge.style.position = "fixed";
-      badge.style.top = `${rect.top + topMargin}px`;
-      badge.style.left = `${rect.left + leftMargin}px`;
-      badge.style.zIndex = "999998";
-      document.body.appendChild(badge);
-      const updatePosition = () => {
-        const rect2 = element.getBoundingClientRect();
-        badge.style.top = `${rect2.top + topMargin}px`;
-        badge.style.left = `${rect2.left + leftMargin}px`;
-      };
-      window.addEventListener("scroll", updatePosition, true);
-      window.addEventListener("resize", updatePosition);
-      badge._cleanup = () => {
-        window.removeEventListener("scroll", updatePosition, true);
-        window.removeEventListener("resize", updatePosition);
-      };
-      return badge;
-    }
-    reindexElements() {
-      let index = 1;
-      this.selectedElements.forEach((data, element) => {
-        data.index = index;
-        const badge = this.badges.get(element);
-        if (badge) {
-          const badgeContent = badge.shadowRoot?.querySelector(".badge");
-          if (badgeContent) {
-            badgeContent.textContent = `(${index}) ${element.tagName}`;
-          }
-        }
-        index++;
-      });
-    }
-  };
-
   // node_modules/@trpc/client/dist/objectSpread2-BvkFp-_Y.mjs
   var __create = Object.create;
   var __defProp = Object.defineProperty;
@@ -2846,7 +2563,94 @@
   var registerSymbol = SuperJSON.registerSymbol;
   var allowErrorProps = SuperJSON.allowErrorProps;
 
-  // src/inspector/managers/AIManager.ts
+  // src/utils/xpath.ts
+  var XPathUtils = class {
+    static generateXPath(element) {
+      if (!element) return "";
+      if (element === document.body) return "//body";
+      if (element === document.documentElement) return "/html";
+      const steps = [];
+      let contextNode = element;
+      while (contextNode) {
+        const step = this.getXPathStep(contextNode, contextNode === element);
+        if (!step.value) break;
+        steps.push(step.value);
+        if (step.optimized) break;
+        const parent = contextNode.parentNode;
+        if (!parent || parent.nodeType === Node.DOCUMENT_NODE) break;
+        contextNode = parent;
+      }
+      steps.reverse();
+      return (steps.length && steps[0].includes("@id") ? "" : "/") + steps.join("/");
+    }
+    static getXPathStep(node, isTargetNode) {
+      if (node.nodeType !== Node.ELEMENT_NODE) {
+        return { value: "", optimized: false };
+      }
+      const id = node.getAttribute("id");
+      if (id && this.isValidId(id)) {
+        if (document.querySelectorAll(`#${CSS.escape(id)}`).length === 1) {
+          return {
+            value: `//*[@id="${id}"]`,
+            optimized: true
+          };
+        }
+      }
+      const nodeName = node.nodeName.toLowerCase();
+      if (nodeName === "body" || nodeName === "head" || nodeName === "html") {
+        return {
+          value: nodeName,
+          optimized: true
+        };
+      }
+      const ownIndex = this.getXPathIndex(node);
+      if (ownIndex === -1) {
+        return { value: "", optimized: false };
+      }
+      let ownValue = nodeName;
+      if (isTargetNode && nodeName === "input" && node.getAttribute("type") && !id && !node.getAttribute("class")) {
+        ownValue += `[@type="${node.getAttribute("type")}"]`;
+      }
+      if (ownIndex > 0) {
+        ownValue += `[${ownIndex + 1}]`;
+      }
+      return {
+        value: ownValue,
+        optimized: false
+      };
+    }
+    static getXPathIndex(node) {
+      const siblings = node.parentNode?.children;
+      if (!siblings) return 0;
+      const areNodesSimilar = (left, right) => {
+        if (left === right) return true;
+        return left.nodeName.toLowerCase() === right.nodeName.toLowerCase();
+      };
+      let hasSameNamedElements = false;
+      for (let i = 0; i < siblings.length; ++i) {
+        if (areNodesSimilar(node, siblings[i]) && siblings[i] !== node) {
+          hasSameNamedElements = true;
+          break;
+        }
+      }
+      if (!hasSameNamedElements) return 0;
+      let ownIndex = 0;
+      for (let i = 0; i < siblings.length; ++i) {
+        if (areNodesSimilar(node, siblings[i])) {
+          if (siblings[i] === node) {
+            return ownIndex;
+          }
+          ++ownIndex;
+        }
+      }
+      return -1;
+    }
+    static isValidId(id) {
+      return Boolean(id) && /^\S.*$/.test(id) && !/[[\](){}<>]/.test(id);
+    }
+  };
+
+  // src/inspector/managers.ts
   var AIManager = class {
     constructor() {
       this.trpcClient = null;
@@ -2962,8 +2766,200 @@
       }
     }
   };
-
-  // src/inspector/managers/InspectionManager.ts
+  var ElementSelectionManager = class {
+    constructor() {
+      this.selectedElements = /* @__PURE__ */ new Map();
+      this.badges = /* @__PURE__ */ new Map();
+      this.colorIndex = 0;
+      this.colors = [
+        "#FF6B6B",
+        "#FF9671",
+        "#FFA75F",
+        "#F9D423",
+        "#FECA57",
+        "#FF9FF3",
+        "#FF7E67",
+        "#FF8C42",
+        "#FFC857",
+        "#FFA26B"
+      ];
+    }
+    selectElement(element, componentFinder) {
+      const color = this.colors[this.colorIndex % this.colors.length];
+      const index = this.selectedElements.size + 1;
+      this.colorIndex++;
+      element.style.outline = `3px solid ${color}`;
+      element.style.outlineOffset = "-1px";
+      const badge = this.createBadge(index, color, element, componentFinder);
+      this.badges.set(element, badge);
+      this.selectedElements.set(element, {
+        color,
+        originalOutline: element.style.outline,
+        originalOutlineOffset: element.style.outlineOffset,
+        index
+      });
+    }
+    deselectElement(element) {
+      const elementData = this.selectedElements.get(element);
+      if (elementData) {
+        ;
+        element.style.outline = "";
+        element.style.outlineOffset = "";
+        const badge = this.badges.get(element);
+        if (badge) {
+          badge.remove();
+          this.badges.delete(element);
+        }
+        this.selectedElements.delete(element);
+        this.reindexElements();
+      }
+    }
+    clearAllSelections() {
+      this.selectedElements.forEach((_, element) => {
+        ;
+        element.style.outline = "";
+        element.style.outlineOffset = "";
+      });
+      this.badges.forEach((badge) => badge.remove());
+      this.badges.clear();
+      this.selectedElements.clear();
+      this.colorIndex = 0;
+    }
+    hasElement(element) {
+      return this.selectedElements.has(element);
+    }
+    getSelectedElements() {
+      return this.selectedElements;
+    }
+    getSelectedCount() {
+      return this.selectedElements.size;
+    }
+    findSelectedParent(element) {
+      let currentElement = element.parentElement;
+      while (currentElement && currentElement !== document.body) {
+        if (this.selectedElements.has(currentElement)) {
+          return currentElement;
+        }
+        currentElement = currentElement.parentElement;
+      }
+      return null;
+    }
+    findSelectedChildren(element) {
+      const children = [];
+      this.selectedElements.forEach((_, selectedElement) => {
+        if (element.contains(selectedElement) && selectedElement !== element) {
+          children.push(selectedElement);
+        }
+      });
+      return children;
+    }
+    buildHierarchicalStructure(componentFinder) {
+      const rootElements = [];
+      this.selectedElements.forEach((_, element) => {
+        if (!this.findSelectedParent(element)) {
+          rootElements.push(element);
+        }
+      });
+      const buildElementInfo = (element) => {
+        const data = this.selectedElements.get(element);
+        const children = this.findSelectedChildren(element);
+        const componentData = componentFinder?.(element);
+        const elementInfo = {
+          index: data.index,
+          tagName: element.tagName,
+          xpath: XPathUtils.generateXPath(element),
+          textContent: element.textContent?.substring(0, 100) || "",
+          attributes: Array.from(element.attributes).reduce((acc, attr) => {
+            if (attr.name !== "style") {
+              acc[attr.name] = attr.value;
+            }
+            return acc;
+          }, {}),
+          children: []
+        };
+        if (componentData) {
+          elementInfo.componentData = componentData;
+        }
+        const directChildren = children.filter(
+          (child) => this.findSelectedParent(child) === element
+        );
+        directChildren.forEach((child) => {
+          elementInfo.children.push(buildElementInfo(child));
+        });
+        return elementInfo;
+      };
+      return rootElements.map((element) => buildElementInfo(element));
+    }
+    createBadge(index, color, element, componentFinder) {
+      const badge = document.createElement("div");
+      badge.classList.add("inspector-badge");
+      const shadow = badge.attachShadow({ mode: "open" });
+      const style = document.createElement("style");
+      style.textContent = `
+      .badge {
+        height: 20px;
+        padding: 0 5px;
+        background-color: ${color};
+        color: white;
+        border-radius: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        font-weight: bold;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        pointer-events: none;
+      }
+    `;
+      const badgeContent = document.createElement("div");
+      badgeContent.classList.add("badge", "inspector-ignore");
+      const component = componentFinder?.(element);
+      if (component && component.componentLocation) {
+        const componentPath = component.componentLocation.split("@")[0];
+        const fileName = componentPath.split("/").pop();
+        badgeContent.textContent = `(${index}) [${fileName}]`;
+      } else {
+        badgeContent.textContent = `(${index}) ${element.tagName}`;
+      }
+      shadow.appendChild(style);
+      shadow.appendChild(badgeContent);
+      const topMargin = -15;
+      const leftMargin = 7;
+      const rect = element.getBoundingClientRect();
+      badge.style.position = "fixed";
+      badge.style.top = `${rect.top + topMargin}px`;
+      badge.style.left = `${rect.left + leftMargin}px`;
+      badge.style.zIndex = "999998";
+      document.body.appendChild(badge);
+      const updatePosition = () => {
+        const rect2 = element.getBoundingClientRect();
+        badge.style.top = `${rect2.top + topMargin}px`;
+        badge.style.left = `${rect2.left + leftMargin}px`;
+      };
+      window.addEventListener("scroll", updatePosition, true);
+      window.addEventListener("resize", updatePosition);
+      badge._cleanup = () => {
+        window.removeEventListener("scroll", updatePosition, true);
+        window.removeEventListener("resize", updatePosition);
+      };
+      return badge;
+    }
+    reindexElements() {
+      let index = 1;
+      this.selectedElements.forEach((data, element) => {
+        data.index = index;
+        const badge = this.badges.get(element);
+        if (badge) {
+          const badgeContent = badge.shadowRoot?.querySelector(".badge");
+          if (badgeContent) {
+            badgeContent.textContent = `(${index}) ${element.tagName}`;
+          }
+        }
+        index++;
+      });
+    }
+  };
   var InspectionManager = class {
     constructor(onElementSelect, shouldIgnoreElement, isElementSelected) {
       this.isInspecting = false;
@@ -3067,8 +3063,123 @@
       this.exitInspectionMode();
     }
   };
+  var ToolbarStateManager = class {
+    constructor(eventEmitter) {
+      this.cleanupFunctions = [];
+      this.events = eventEmitter;
+      this.state = {
+        isExpanded: false,
+        isInspecting: false,
+        isProcessing: false,
+        sessionId: null,
+        selectedElements: [],
+        messages: []
+      };
+      this.setupEventListeners();
+    }
+    setupEventListeners() {
+      this.cleanupFunctions.push(
+        this.events.on("ui:expand", () => {
+          this.state.isExpanded = true;
+          this.onStateChange();
+        }),
+        this.events.on("ui:collapse", () => {
+          this.state.isExpanded = false;
+          this.state.isInspecting = false;
+          this.onStateChange();
+        }),
+        this.events.on("ui:enter-inspection", () => {
+          this.state.isInspecting = true;
+          this.onStateChange();
+        }),
+        this.events.on("ui:exit-inspection", () => {
+          this.state.isInspecting = false;
+          this.onStateChange();
+        }),
+        this.events.on("ui:processing-start", () => {
+          this.state.isProcessing = true;
+          this.state.isInspecting = false;
+          this.onStateChange();
+        }),
+        this.events.on("ui:processing-end", () => {
+          this.state.isProcessing = false;
+          this.onStateChange();
+        })
+      );
+      this.cleanupFunctions.push(
+        this.events.on("selection:changed", (elements) => {
+          this.state.selectedElements = elements;
+          this.onStateChange();
+        }),
+        this.events.on("selection:clear", () => {
+          this.state.selectedElements = [];
+          this.onStateChange();
+        })
+      );
+      this.cleanupFunctions.push(
+        this.events.on("session:updated", ({ sessionId }) => {
+          this.state.sessionId = sessionId;
+          this.onStateChange();
+        }),
+        this.events.on("session:new", () => {
+          this.state.sessionId = null;
+          this.state.selectedElements = [];
+          this.state.messages = [];
+          this.onStateChange();
+        })
+      );
+      this.cleanupFunctions.push(
+        this.events.on("messages:add", (message) => {
+          this.state.messages.push(message);
+          if ((message.type === "claude_json" || message.type === "claude_response" || message.type === "complete") && message.sessionId) {
+            this.state.sessionId = message.sessionId;
+          }
+          if (message.type === "complete") {
+            this.state.isProcessing = false;
+          }
+          this.onStateChange();
+        }),
+        this.events.on("messages:clear", () => {
+          this.state.messages = [];
+          this.onStateChange();
+        })
+      );
+      this.cleanupFunctions.push(
+        this.events.on("prompt:clear", () => {
+          this.onStateChange();
+        })
+      );
+    }
+    onStateChange() {
+    }
+    getState() {
+      return { ...this.state };
+    }
+    isExpanded() {
+      return this.state.isExpanded;
+    }
+    isInspecting() {
+      return this.state.isInspecting;
+    }
+    isProcessing() {
+      return this.state.isProcessing;
+    }
+    getSessionId() {
+      return this.state.sessionId;
+    }
+    getSelectedElements() {
+      return [...this.state.selectedElements];
+    }
+    getMessages() {
+      return [...this.state.messages];
+    }
+    destroy() {
+      this.cleanupFunctions.forEach((cleanup) => cleanup());
+      this.cleanupFunctions = [];
+    }
+  };
 
-  // src/inspector/detectors/ComponentDetector.ts
+  // src/inspector/detectors.ts
   var ComponentDetector = class _ComponentDetector {
     static findNearestComponent(element) {
       if (!element || element === document.body) return null;
@@ -3140,7 +3251,25 @@
     }
   };
 
-  // src/inspector/ui/styles.ts
+  // src/utils/html.ts
+  var HtmlUtils = class {
+    static escapeHtml(text) {
+      const div = document.createElement("div");
+      div.textContent = text;
+      return div.innerHTML;
+    }
+    static hashString(content) {
+      let hash = 0;
+      for (let i = 0; i < content.length; i++) {
+        const char = content.charCodeAt(i);
+        hash = (hash << 5) - hash + char;
+        hash = hash & hash;
+      }
+      return hash.toString();
+    }
+  };
+
+  // src/inspector/ui.ts
   var TOOLBAR_STYLES = `
   :host {
     position: fixed;
@@ -3670,8 +3799,6 @@
     80%, 100% { content: '...'; }
   }
 `;
-
-  // src/inspector/ui/UIRenderer.ts
   var UIRenderer = class {
     static renderToolbar() {
       return `
@@ -3728,48 +3855,6 @@
     `;
     }
   };
-
-  // src/inspector/utils/html.ts
-  var HtmlUtils = class {
-    static escapeHtml(text) {
-      const div = document.createElement("div");
-      div.textContent = text;
-      return div.innerHTML;
-    }
-    static async copyToClipboard(text) {
-      try {
-        if (navigator.clipboard && window.isSecureContext) {
-          await navigator.clipboard.writeText(text);
-          return true;
-        }
-        const textArea = document.createElement("textarea");
-        textArea.value = text;
-        textArea.style.position = "fixed";
-        textArea.style.left = "-999999px";
-        textArea.style.top = "-999999px";
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        const successful = document.execCommand("copy");
-        document.body.removeChild(textArea);
-        return successful;
-      } catch (error) {
-        console.error("Failed to copy to clipboard:", error);
-        return false;
-      }
-    }
-    static hashString(content) {
-      let hash = 0;
-      for (let i = 0; i < content.length; i++) {
-        const char = content.charCodeAt(i);
-        hash = (hash << 5) - hash + char;
-        hash = hash & hash;
-      }
-      return hash.toString();
-    }
-  };
-
-  // src/inspector/formatters/MessageFormatter.ts
   var MessageFormatter = class {
     constructor() {
       this.lastMessageHash = "";
@@ -3926,7 +4011,7 @@
     } };
   }
 
-  // src/inspector/events/ToolbarEvents.ts
+  // src/inspector/events.ts
   var ToolbarEventEmitter = class {
     constructor() {
       this.emitter = mitt_default();
@@ -3954,126 +4039,6 @@
     // Remove all listeners (for cleanup)
     cleanup() {
       this.emitter.all.clear();
-    }
-  };
-
-  // src/inspector/managers/ToolbarStateManager.ts
-  var ToolbarStateManager = class {
-    constructor(eventEmitter) {
-      this.cleanupFunctions = [];
-      this.events = eventEmitter;
-      this.state = {
-        isExpanded: false,
-        isInspecting: false,
-        isProcessing: false,
-        sessionId: null,
-        selectedElements: [],
-        messages: []
-      };
-      this.setupEventListeners();
-    }
-    setupEventListeners() {
-      this.cleanupFunctions.push(
-        this.events.on("ui:expand", () => {
-          this.state.isExpanded = true;
-          this.onStateChange();
-        }),
-        this.events.on("ui:collapse", () => {
-          this.state.isExpanded = false;
-          this.state.isInspecting = false;
-          this.onStateChange();
-        }),
-        this.events.on("ui:enter-inspection", () => {
-          this.state.isInspecting = true;
-          this.onStateChange();
-        }),
-        this.events.on("ui:exit-inspection", () => {
-          this.state.isInspecting = false;
-          this.onStateChange();
-        }),
-        this.events.on("ui:processing-start", () => {
-          this.state.isProcessing = true;
-          this.state.isInspecting = false;
-          this.onStateChange();
-        }),
-        this.events.on("ui:processing-end", () => {
-          this.state.isProcessing = false;
-          this.onStateChange();
-        })
-      );
-      this.cleanupFunctions.push(
-        this.events.on("selection:changed", (elements) => {
-          this.state.selectedElements = elements;
-          this.onStateChange();
-        }),
-        this.events.on("selection:clear", () => {
-          this.state.selectedElements = [];
-          this.onStateChange();
-        })
-      );
-      this.cleanupFunctions.push(
-        this.events.on("session:updated", ({ sessionId }) => {
-          this.state.sessionId = sessionId;
-          this.onStateChange();
-        }),
-        this.events.on("session:new", () => {
-          this.state.sessionId = null;
-          this.state.selectedElements = [];
-          this.state.messages = [];
-          this.onStateChange();
-        })
-      );
-      this.cleanupFunctions.push(
-        this.events.on("messages:add", (message) => {
-          this.state.messages.push(message);
-          if ((message.type === "claude_json" || message.type === "claude_response" || message.type === "complete") && message.sessionId) {
-            this.state.sessionId = message.sessionId;
-          }
-          if (message.type === "complete") {
-            this.state.isProcessing = false;
-          }
-          this.onStateChange();
-        }),
-        this.events.on("messages:clear", () => {
-          this.state.messages = [];
-          this.onStateChange();
-        })
-      );
-      this.cleanupFunctions.push(
-        this.events.on("prompt:clear", () => {
-          this.onStateChange();
-        })
-      );
-    }
-    // Called whenever state changes - can be used for debugging or additional coordination
-    onStateChange() {
-    }
-    // Getters for accessing state
-    getState() {
-      return { ...this.state };
-    }
-    isExpanded() {
-      return this.state.isExpanded;
-    }
-    isInspecting() {
-      return this.state.isInspecting;
-    }
-    isProcessing() {
-      return this.state.isProcessing;
-    }
-    getSessionId() {
-      return this.state.sessionId;
-    }
-    getSelectedElements() {
-      return [...this.state.selectedElements];
-    }
-    getMessages() {
-      return [...this.state.messages];
-    }
-    // Cleanup
-    destroy() {
-      this.cleanupFunctions.forEach((cleanup) => cleanup());
-      this.cleanupFunctions = [];
     }
   };
 
@@ -4240,7 +4205,6 @@
             this.events.emit("ui:exit-inspection", void 0);
           }
           this.events.emit("selection:clear", void 0);
-          this.events.emit("messages:clear", void 0);
           this.events.emit("prompt:clear", void 0);
         }
       });
@@ -4278,11 +4242,22 @@
           console.warn("AI manager not initialized");
         }
       });
-      cancelButton?.addEventListener("click", () => {
+      cancelButton?.addEventListener("click", async () => {
         if (this.aiManager.isProcessing()) {
           this.aiManager.cancel();
           this.setProcessingState(false);
           this.showNotification("Request cancelled", "success");
+          if (promptInput) promptInput.value = "";
+          this.selectionManager.clearAllSelections();
+          this.clearJsonDisplay();
+          if (this.aiManager.isInitialized()) {
+            try {
+              await this.aiManager.newChat();
+              this.events.emit("session:updated", { sessionId: this.aiManager.getSessionId() });
+            } catch (error) {
+              console.error("Failed to start new chat after cancel:", error);
+            }
+          }
         }
       });
       jsonClearButton?.addEventListener("click", () => {
