@@ -1,5 +1,5 @@
 /**
- * Refactored InspectorToolbar using modular architecture
+ * Refactored InspectorToolbar using event-driven architecture
  */
 
 import type { ElementData, PageInfo, SendMessageResponse } from './shared/types'
@@ -9,16 +9,22 @@ import { InspectionManager } from './inspector/managers/InspectionManager'
 import { ComponentDetector } from './inspector/detectors/ComponentDetector'
 import { UIRenderer } from './inspector/ui/UIRenderer'
 import { MessageFormatter } from './inspector/formatters/MessageFormatter'
+import { ToolbarEventEmitter } from './inspector/events/ToolbarEvents'
+import { ToolbarStateManager } from './inspector/managers/ToolbarStateManager'
 
 export class InspectorToolbar extends HTMLElement {
-  private isExpanded = false
-  private isProcessing = false
+  // Event-driven architecture
+  private events = new ToolbarEventEmitter()
+  private stateManager = new ToolbarStateManager(this.events)
   
   // Managers
   private selectionManager = new ElementSelectionManager()
   private aiManager = new AIManager()
   private inspectionManager: InspectionManager
   private messageFormatter = new MessageFormatter()
+
+  // Event cleanup functions
+  private cleanupFunctions: (() => void)[] = []
 
   constructor() {
     super()
@@ -32,7 +38,8 @@ export class InspectorToolbar extends HTMLElement {
     )
     
     this.render()
-    this.attachEventListeners()
+    this.setupEventListeners()
+    this.attachDOMEventListeners()
   }
 
   get aiEndpoint(): string {
@@ -64,7 +71,108 @@ export class InspectorToolbar extends HTMLElement {
     this.shadowRoot.innerHTML = UIRenderer.renderToolbar()
   }
 
-  private attachEventListeners(): void {
+  private setupEventListeners(): void {
+    // Listen to state changes and update UI accordingly
+    this.cleanupFunctions.push(
+      this.events.on('ui:expand', () => this.updateExpandedState(true)),
+      this.events.on('ui:collapse', () => this.updateExpandedState(false)),
+      this.events.on('ui:enter-inspection', () => this.updateInspectionState(true)),
+      this.events.on('ui:exit-inspection', () => this.updateInspectionState(false)),
+      this.events.on('ui:processing-start', () => this.updateProcessingState(true)),
+      this.events.on('ui:processing-end', () => this.updateProcessingState(false)),
+      this.events.on('session:updated', ({ sessionId }) => this.updateSessionDisplay(sessionId)),
+      this.events.on('selection:changed', () => this.updateSelectionDisplay()),
+      this.events.on('messages:add', (message) => this.displayMessage(message)),
+      this.events.on('messages:clear', () => this.clearMessagesDisplay()),
+      this.events.on('prompt:clear', () => this.clearPromptInput()),
+      this.events.on('selection:clear', () => this.selectionManager.clearAllSelections()),
+      this.events.on('notification:show', ({ message, type }) => {
+        if (type === 'info') {
+          this.showNotification(message, 'success') // Map info to success for now
+        } else {
+          this.showNotification(message, type)
+        }
+      })
+    )
+  }
+
+  // UI update methods triggered by events
+  private updateExpandedState(isExpanded: boolean): void {
+    const toolbarCard = this.shadowRoot?.getElementById('toolbarCard')
+    const toggleButton = this.shadowRoot?.getElementById('toggleButton')
+
+    if (isExpanded) {
+      toolbarCard?.classList.add('expanded')
+      toggleButton?.classList.add('active')
+    } else {
+      toolbarCard?.classList.remove('expanded')
+      toggleButton?.classList.remove('active')
+    }
+  }
+
+  private updateInspectionState(isInspecting: boolean): void {
+    const toolbarCard = this.shadowRoot?.querySelector('.toolbar-card')
+
+    if (isInspecting) {
+      toolbarCard?.classList.add('inspecting')
+    } else {
+      toolbarCard?.classList.remove('inspecting')
+    }
+  }
+
+  private updateProcessingState(isProcessing: boolean): void {
+    const toolbarCard = this.shadowRoot?.getElementById('toolbarCard')
+
+    if (isProcessing) {
+      toolbarCard?.classList.add('processing')
+    } else {
+      toolbarCard?.classList.remove('processing')
+    }
+  }
+
+  private updateSessionDisplay(sessionId?: string | null): void {
+    const sessionInfoElement = this.shadowRoot?.getElementById('sessionInfo')
+    const sessionIdElement = this.shadowRoot?.getElementById('sessionId')
+    const cancelButton = this.shadowRoot?.getElementById('cancelButton')
+
+    if (sessionInfoElement && sessionIdElement) {
+      if (sessionId) {
+        sessionInfoElement.style.display = 'flex'
+        sessionIdElement.textContent = sessionId.substring(0, 8)
+        sessionIdElement.title = sessionId
+      } else {
+        sessionInfoElement.style.display = 'none'
+      }
+
+      // Show/hide cancel button based on processing state
+      if (cancelButton) {
+        if (this.stateManager.isProcessing()) {
+          cancelButton.style.display = 'inline-flex'
+        } else {
+          cancelButton.style.display = 'none'
+        }
+      }
+    }
+  }
+
+  private updateSelectionDisplay(): void {
+    // Could update selection count or other selection-related UI here
+  }
+
+  private displayMessage(message: SendMessageResponse): void {
+    this.displayJsonMessage(message)
+  }
+
+  private clearMessagesDisplay(): void {
+    this.clearJsonDisplay()
+  }
+
+  private clearPromptInput(): void {
+    const promptInput = this.shadowRoot?.getElementById('promptInput') as HTMLTextAreaElement
+    if (promptInput) promptInput.value = ''
+  }
+
+  private attachDOMEventListeners(): void {
     if (!this.shadowRoot) return
 
     const toggleButton = this.shadowRoot.getElementById('toggleButton')
@@ -83,51 +191,48 @@ export class InspectorToolbar extends HTMLElement {
       evt.stopPropagation()
       evt.stopImmediatePropagation()
 
-      this.isExpanded = !this.isExpanded
-      if (this.isExpanded) {
-        toolbarCard?.classList.add('expanded')
-        toggleButton.classList.add('active')
+      const isCurrentlyExpanded = this.stateManager.isExpanded()
 
-        if (this.selectionManager.getSelectedCount() === 0 && !this.inspectionManager.isInInspectionMode() && !this.isProcessing) {
-          this.enterInspectionMode()
+      if (!isCurrentlyExpanded) {
+        this.events.emit('ui:expand', undefined)
+
+        if (this.selectionManager.getSelectedCount() === 0 && !this.inspectionManager.isInInspectionMode() && !this.stateManager.isProcessing()) {
+          this.events.emit('ui:enter-inspection', undefined)
         }
       } else {
-        toolbarCard?.classList.remove('expanded')
-        toggleButton.classList.remove('active')
+        this.events.emit('ui:collapse', undefined)
 
         if (this.inspectionManager.isInInspectionMode()) {
-          this.exitInspectionMode()
+          this.events.emit('ui:exit-inspection', undefined)
         }
-        this.selectionManager.clearAllSelections()
-        this.clearJsonDisplay()
-        if (promptInput) promptInput.value = ''
+        this.events.emit('selection:clear', undefined)
+        this.events.emit('messages:clear', undefined)
+        this.events.emit('prompt:clear', undefined)
       }
     })
 
     // Click outside to collapse
     document.addEventListener('click', (e) => {
-      if (!this.contains(e.target as Node) && this.isExpanded && !this.inspectionManager.isInInspectionMode()) {
-        this.isExpanded = false
-        toolbarCard?.classList.remove('expanded')
-        toggleButton?.classList.remove('active')
+      if (!this.contains(e.target as Node) && this.stateManager.isExpanded() && !this.inspectionManager.isInInspectionMode()) {
+        this.events.emit('ui:collapse', undefined)
       }
     })
 
     // Start inspection mode
     inspectButton?.addEventListener('click', () => {
-      if (!this.isProcessing) {
-        this.enterInspectionMode()
+      if (!this.stateManager.isProcessing()) {
+        this.events.emit('ui:enter-inspection', undefined)
       }
     })
 
     // Clear selected elements only (keep messages and session)
     clearElementButton?.addEventListener('click', () => {
-      this.selectionManager.clearAllSelections()
+      this.events.emit('selection:clear', undefined)
     })
 
     // Exit inspection mode
     closeInspectButton?.addEventListener('click', () => {
-      this.exitInspectionMode()
+      this.events.emit('ui:exit-inspection', undefined)
     })
 
     // New chat button
@@ -136,14 +241,14 @@ export class InspectorToolbar extends HTMLElement {
       this.selectionManager.clearAllSelections()
       this.clearJsonDisplay()
       
-      if (!this.isProcessing) {
+      if (!this.stateManager.isProcessing()) {
         this.enterInspectionMode()
       }
 
       if (this.aiManager.isInitialized()) {
         try {
           await this.aiManager.newChat()
-          this.updateSessionDisplay()
+          this.events.emit('session:updated', { sessionId: this.aiManager.getSessionId() })
         } catch (error) {
           console.error('Failed to start new chat:', error)
         }
@@ -228,7 +333,7 @@ export class InspectorToolbar extends HTMLElement {
       return
     }
 
-    if (this.isProcessing) {
+    if (this.stateManager.isProcessing()) {
       console.log('Already processing, ignoring new prompt')
       return
     }
@@ -291,7 +396,7 @@ export class InspectorToolbar extends HTMLElement {
           
           // Update session display when session ID is received
           if ((data.type === 'complete' || data.type === 'claude_response' || data.type === 'claude_json') && data.sessionId) {
-            this.updateSessionDisplay()
+            this.events.emit('session:updated', { sessionId: data.sessionId })
           }
         },
         onError: (error) => {
@@ -361,17 +466,11 @@ export class InspectorToolbar extends HTMLElement {
 
 
   private setProcessingState(isProcessing: boolean): void {
-    this.isProcessing = isProcessing
-    const toolbarCard = this.shadowRoot?.getElementById('toolbarCard')
-
     if (isProcessing) {
-      toolbarCard?.classList.add('processing')
+      this.events.emit('ui:processing-start', undefined)
     } else {
-      toolbarCard?.classList.remove('processing')
+      this.events.emit('ui:processing-end', undefined)
     }
-    
-    // Update session display to show/hide cancel button
-    this.updateSessionDisplay()
   }
 
   private hideProcessingIndicator(): void {
@@ -381,42 +480,19 @@ export class InspectorToolbar extends HTMLElement {
     }
   }
 
-  private updateSessionDisplay(): void {
-    const sessionInfoElement = this.shadowRoot?.getElementById('sessionInfo')
-    const sessionIdElement = this.shadowRoot?.getElementById('sessionId')
-    const cancelButton = this.shadowRoot?.getElementById('cancelButton')
-    
-    if (sessionInfoElement && sessionIdElement) {
-      const sessionId = this.aiManager.getSessionId()
-      
-      if (sessionId) {
-        sessionInfoElement.style.display = 'flex'
-        sessionIdElement.textContent = sessionId.substring(0, 8)
-        sessionIdElement.title = sessionId
-      } else {
-        sessionInfoElement.style.display = 'none'
-      }
-      
-      // Show/hide cancel button based on processing state
-      if (cancelButton) {
-        if (this.aiManager.isProcessing()) {
-          cancelButton.style.display = 'inline-flex'
-        } else {
-          cancelButton.style.display = 'none'
-        }
-      }
-    }
-  }
 
   connectedCallback(): void {
     this.aiManager.initialize(this.aiEndpoint)
-    this.updateSessionDisplay()
+    this.events.emit('session:updated', { sessionId: this.aiManager.getSessionId() })
   }
 
   disconnectedCallback(): void {
     this.aiManager.destroy()
     this.inspectionManager.destroy()
     this.selectionManager.clearAllSelections()
+    this.stateManager.destroy()
+    this.events.cleanup()
+    this.cleanupFunctions.forEach(cleanup => cleanup())
   }
 }
 

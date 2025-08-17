@@ -3902,16 +3902,188 @@
     }
   };
 
+  // node_modules/mitt/dist/mitt.mjs
+  function mitt_default(n) {
+    return { all: n = n || /* @__PURE__ */ new Map(), on: function(t, e) {
+      var i = n.get(t);
+      i ? i.push(e) : n.set(t, [e]);
+    }, off: function(t, e) {
+      var i = n.get(t);
+      i && (e ? i.splice(i.indexOf(e) >>> 0, 1) : n.set(t, []));
+    }, emit: function(t, e) {
+      var i = n.get(t);
+      i && i.slice().map(function(n2) {
+        n2(e);
+      }), (i = n.get("*")) && i.slice().map(function(n2) {
+        n2(t, e);
+      });
+    } };
+  }
+
+  // src/inspector/events/ToolbarEvents.ts
+  var ToolbarEventEmitter = class {
+    constructor() {
+      this.emitter = mitt_default();
+    }
+    // Emit events with error handling
+    emit(event, data) {
+      try {
+        this.emitter.emit(event, data);
+      } catch (error) {
+        console.error(`Error emitting toolbar event ${String(event)}:`, error);
+      }
+    }
+    // Listen to events with error handling
+    on(event, handler) {
+      const safeHandler = (data) => {
+        try {
+          handler(data);
+        } catch (error) {
+          console.error(`Error handling toolbar event ${String(event)}:`, error);
+        }
+      };
+      this.emitter.on(event, safeHandler);
+      return () => this.emitter.off(event, safeHandler);
+    }
+    // Remove all listeners (for cleanup)
+    cleanup() {
+      this.emitter.all.clear();
+    }
+  };
+
+  // src/inspector/managers/ToolbarStateManager.ts
+  var ToolbarStateManager = class {
+    constructor(eventEmitter) {
+      this.cleanupFunctions = [];
+      this.events = eventEmitter;
+      this.state = {
+        isExpanded: false,
+        isInspecting: false,
+        isProcessing: false,
+        sessionId: null,
+        selectedElements: [],
+        messages: []
+      };
+      this.setupEventListeners();
+    }
+    setupEventListeners() {
+      this.cleanupFunctions.push(
+        this.events.on("ui:expand", () => {
+          this.state.isExpanded = true;
+          this.onStateChange();
+        }),
+        this.events.on("ui:collapse", () => {
+          this.state.isExpanded = false;
+          this.state.isInspecting = false;
+          this.onStateChange();
+        }),
+        this.events.on("ui:enter-inspection", () => {
+          this.state.isInspecting = true;
+          this.onStateChange();
+        }),
+        this.events.on("ui:exit-inspection", () => {
+          this.state.isInspecting = false;
+          this.onStateChange();
+        }),
+        this.events.on("ui:processing-start", () => {
+          this.state.isProcessing = true;
+          this.state.isInspecting = false;
+          this.onStateChange();
+        }),
+        this.events.on("ui:processing-end", () => {
+          this.state.isProcessing = false;
+          this.onStateChange();
+        })
+      );
+      this.cleanupFunctions.push(
+        this.events.on("selection:changed", (elements) => {
+          this.state.selectedElements = elements;
+          this.onStateChange();
+        }),
+        this.events.on("selection:clear", () => {
+          this.state.selectedElements = [];
+          this.onStateChange();
+        })
+      );
+      this.cleanupFunctions.push(
+        this.events.on("session:updated", ({ sessionId }) => {
+          this.state.sessionId = sessionId;
+          this.onStateChange();
+        }),
+        this.events.on("session:new", () => {
+          this.state.sessionId = null;
+          this.state.selectedElements = [];
+          this.state.messages = [];
+          this.onStateChange();
+        })
+      );
+      this.cleanupFunctions.push(
+        this.events.on("messages:add", (message) => {
+          this.state.messages.push(message);
+          if ((message.type === "claude_json" || message.type === "claude_response" || message.type === "complete") && message.sessionId) {
+            this.state.sessionId = message.sessionId;
+          }
+          if (message.type === "complete") {
+            this.state.isProcessing = false;
+          }
+          this.onStateChange();
+        }),
+        this.events.on("messages:clear", () => {
+          this.state.messages = [];
+          this.onStateChange();
+        })
+      );
+      this.cleanupFunctions.push(
+        this.events.on("prompt:clear", () => {
+          this.onStateChange();
+        })
+      );
+    }
+    // Called whenever state changes - can be used for debugging or additional coordination
+    onStateChange() {
+    }
+    // Getters for accessing state
+    getState() {
+      return { ...this.state };
+    }
+    isExpanded() {
+      return this.state.isExpanded;
+    }
+    isInspecting() {
+      return this.state.isInspecting;
+    }
+    isProcessing() {
+      return this.state.isProcessing;
+    }
+    getSessionId() {
+      return this.state.sessionId;
+    }
+    getSelectedElements() {
+      return [...this.state.selectedElements];
+    }
+    getMessages() {
+      return [...this.state.messages];
+    }
+    // Cleanup
+    destroy() {
+      this.cleanupFunctions.forEach((cleanup) => cleanup());
+      this.cleanupFunctions = [];
+    }
+  };
+
   // src/inspector-toolbar.ts
   var InspectorToolbar = class extends HTMLElement {
     constructor() {
       super();
-      this.isExpanded = false;
-      this.isProcessing = false;
+      // Event-driven architecture
+      this.events = new ToolbarEventEmitter();
+      this.stateManager = new ToolbarStateManager(this.events);
       // Managers
       this.selectionManager = new ElementSelectionManager();
       this.aiManager = new AIManager();
       this.messageFormatter = new MessageFormatter();
+      // Event cleanup functions
+      this.cleanupFunctions = [];
       this.attachShadow({ mode: "open" });
       this.inspectionManager = new InspectionManager(
         (element) => this.handleElementSelection(element),
@@ -3919,7 +4091,8 @@
         (element) => this.selectionManager.hasElement(element)
       );
       this.render();
-      this.attachEventListeners();
+      this.setupEventListeners();
+      this.attachDOMEventListeners();
     }
     get aiEndpoint() {
       return this.getAttribute("ai-endpoint") || "";
@@ -3945,7 +4118,91 @@
       if (!this.shadowRoot) return;
       this.shadowRoot.innerHTML = UIRenderer.renderToolbar();
     }
-    attachEventListeners() {
+    setupEventListeners() {
+      this.cleanupFunctions.push(
+        this.events.on("ui:expand", () => this.updateExpandedState(true)),
+        this.events.on("ui:collapse", () => this.updateExpandedState(false)),
+        this.events.on("ui:enter-inspection", () => this.updateInspectionState(true)),
+        this.events.on("ui:exit-inspection", () => this.updateInspectionState(false)),
+        this.events.on("ui:processing-start", () => this.updateProcessingState(true)),
+        this.events.on("ui:processing-end", () => this.updateProcessingState(false)),
+        this.events.on("session:updated", ({ sessionId }) => this.updateSessionDisplay(sessionId)),
+        this.events.on("selection:changed", () => this.updateSelectionDisplay()),
+        this.events.on("messages:add", (message) => this.displayMessage(message)),
+        this.events.on("messages:clear", () => this.clearMessagesDisplay()),
+        this.events.on("prompt:clear", () => this.clearPromptInput()),
+        this.events.on("selection:clear", () => this.selectionManager.clearAllSelections()),
+        this.events.on("notification:show", ({ message, type }) => {
+          if (type === "info") {
+            this.showNotification(message, "success");
+          } else {
+            this.showNotification(message, type);
+          }
+        })
+      );
+    }
+    // UI update methods triggered by events
+    updateExpandedState(isExpanded) {
+      const toolbarCard = this.shadowRoot?.getElementById("toolbarCard");
+      const toggleButton = this.shadowRoot?.getElementById("toggleButton");
+      if (isExpanded) {
+        toolbarCard?.classList.add("expanded");
+        toggleButton?.classList.add("active");
+      } else {
+        toolbarCard?.classList.remove("expanded");
+        toggleButton?.classList.remove("active");
+      }
+    }
+    updateInspectionState(isInspecting) {
+      const toolbarCard = this.shadowRoot?.querySelector(".toolbar-card");
+      if (isInspecting) {
+        toolbarCard?.classList.add("inspecting");
+      } else {
+        toolbarCard?.classList.remove("inspecting");
+      }
+    }
+    updateProcessingState(isProcessing) {
+      const toolbarCard = this.shadowRoot?.getElementById("toolbarCard");
+      if (isProcessing) {
+        toolbarCard?.classList.add("processing");
+      } else {
+        toolbarCard?.classList.remove("processing");
+      }
+    }
+    updateSessionDisplay(sessionId) {
+      const sessionInfoElement = this.shadowRoot?.getElementById("sessionInfo");
+      const sessionIdElement = this.shadowRoot?.getElementById("sessionId");
+      const cancelButton = this.shadowRoot?.getElementById("cancelButton");
+      if (sessionInfoElement && sessionIdElement) {
+        if (sessionId) {
+          sessionInfoElement.style.display = "flex";
+          sessionIdElement.textContent = sessionId.substring(0, 8);
+          sessionIdElement.title = sessionId;
+        } else {
+          sessionInfoElement.style.display = "none";
+        }
+        if (cancelButton) {
+          if (this.stateManager.isProcessing()) {
+            cancelButton.style.display = "inline-flex";
+          } else {
+            cancelButton.style.display = "none";
+          }
+        }
+      }
+    }
+    updateSelectionDisplay() {
+    }
+    displayMessage(message) {
+      this.displayJsonMessage(message);
+    }
+    clearMessagesDisplay() {
+      this.clearJsonDisplay();
+    }
+    clearPromptInput() {
+      const promptInput = this.shadowRoot?.getElementById("promptInput");
+      if (promptInput) promptInput.value = "";
+    }
+    attachDOMEventListeners() {
       if (!this.shadowRoot) return;
       const toggleButton = this.shadowRoot.getElementById("toggleButton");
       const toolbarCard = this.shadowRoot.getElementById("toolbarCard");
@@ -3960,53 +4217,49 @@
         evt.preventDefault();
         evt.stopPropagation();
         evt.stopImmediatePropagation();
-        this.isExpanded = !this.isExpanded;
-        if (this.isExpanded) {
-          toolbarCard?.classList.add("expanded");
-          toggleButton.classList.add("active");
-          if (this.selectionManager.getSelectedCount() === 0 && !this.inspectionManager.isInInspectionMode() && !this.isProcessing) {
-            this.enterInspectionMode();
+        const isCurrentlyExpanded = this.stateManager.isExpanded();
+        if (!isCurrentlyExpanded) {
+          this.events.emit("ui:expand", void 0);
+          if (this.selectionManager.getSelectedCount() === 0 && !this.inspectionManager.isInInspectionMode() && !this.stateManager.isProcessing()) {
+            this.events.emit("ui:enter-inspection", void 0);
           }
         } else {
-          toolbarCard?.classList.remove("expanded");
-          toggleButton.classList.remove("active");
+          this.events.emit("ui:collapse", void 0);
           if (this.inspectionManager.isInInspectionMode()) {
-            this.exitInspectionMode();
+            this.events.emit("ui:exit-inspection", void 0);
           }
-          this.selectionManager.clearAllSelections();
-          this.clearJsonDisplay();
-          if (promptInput) promptInput.value = "";
+          this.events.emit("selection:clear", void 0);
+          this.events.emit("messages:clear", void 0);
+          this.events.emit("prompt:clear", void 0);
         }
       });
       document.addEventListener("click", (e) => {
-        if (!this.contains(e.target) && this.isExpanded && !this.inspectionManager.isInInspectionMode()) {
-          this.isExpanded = false;
-          toolbarCard?.classList.remove("expanded");
-          toggleButton?.classList.remove("active");
+        if (!this.contains(e.target) && this.stateManager.isExpanded() && !this.inspectionManager.isInInspectionMode()) {
+          this.events.emit("ui:collapse", void 0);
         }
       });
       inspectButton?.addEventListener("click", () => {
-        if (!this.isProcessing) {
-          this.enterInspectionMode();
+        if (!this.stateManager.isProcessing()) {
+          this.events.emit("ui:enter-inspection", void 0);
         }
       });
       clearElementButton?.addEventListener("click", () => {
-        this.selectionManager.clearAllSelections();
+        this.events.emit("selection:clear", void 0);
       });
       closeInspectButton?.addEventListener("click", () => {
-        this.exitInspectionMode();
+        this.events.emit("ui:exit-inspection", void 0);
       });
       newChatButton?.addEventListener("click", async () => {
         if (promptInput) promptInput.value = "";
         this.selectionManager.clearAllSelections();
         this.clearJsonDisplay();
-        if (!this.isProcessing) {
+        if (!this.stateManager.isProcessing()) {
           this.enterInspectionMode();
         }
         if (this.aiManager.isInitialized()) {
           try {
             await this.aiManager.newChat();
-            this.updateSessionDisplay();
+            this.events.emit("session:updated", { sessionId: this.aiManager.getSessionId() });
           } catch (error) {
             console.error("Failed to start new chat:", error);
           }
@@ -4074,7 +4327,7 @@
         console.log("Empty prompt, nothing to process");
         return;
       }
-      if (this.isProcessing) {
+      if (this.stateManager.isProcessing()) {
         console.log("Already processing, ignoring new prompt");
         return;
       }
@@ -4123,7 +4376,7 @@
               this.setProcessingState(false);
             }
             if ((data.type === "complete" || data.type === "claude_response" || data.type === "claude_json") && data.sessionId) {
-              this.updateSessionDisplay();
+              this.events.emit("session:updated", { sessionId: data.sessionId });
             }
           },
           onError: (error) => {
@@ -4175,14 +4428,11 @@
       this.messageFormatter.clearHistory();
     }
     setProcessingState(isProcessing) {
-      this.isProcessing = isProcessing;
-      const toolbarCard = this.shadowRoot?.getElementById("toolbarCard");
       if (isProcessing) {
-        toolbarCard?.classList.add("processing");
+        this.events.emit("ui:processing-start", void 0);
       } else {
-        toolbarCard?.classList.remove("processing");
+        this.events.emit("ui:processing-end", void 0);
       }
-      this.updateSessionDisplay();
     }
     hideProcessingIndicator() {
       const processingIndicator = this.shadowRoot?.getElementById("processingIndicator");
@@ -4190,36 +4440,17 @@
         processingIndicator.style.display = "none";
       }
     }
-    updateSessionDisplay() {
-      const sessionInfoElement = this.shadowRoot?.getElementById("sessionInfo");
-      const sessionIdElement = this.shadowRoot?.getElementById("sessionId");
-      const cancelButton = this.shadowRoot?.getElementById("cancelButton");
-      if (sessionInfoElement && sessionIdElement) {
-        const sessionId = this.aiManager.getSessionId();
-        if (sessionId) {
-          sessionInfoElement.style.display = "flex";
-          sessionIdElement.textContent = sessionId.substring(0, 8);
-          sessionIdElement.title = sessionId;
-        } else {
-          sessionInfoElement.style.display = "none";
-        }
-        if (cancelButton) {
-          if (this.aiManager.isProcessing()) {
-            cancelButton.style.display = "inline-flex";
-          } else {
-            cancelButton.style.display = "none";
-          }
-        }
-      }
-    }
     connectedCallback() {
       this.aiManager.initialize(this.aiEndpoint);
-      this.updateSessionDisplay();
+      this.events.emit("session:updated", { sessionId: this.aiManager.getSessionId() });
     }
     disconnectedCallback() {
       this.aiManager.destroy();
       this.inspectionManager.destroy();
       this.selectionManager.clearAllSelections();
+      this.stateManager.destroy();
+      this.events.cleanup();
+      this.cleanupFunctions.forEach((cleanup) => cleanup());
     }
   };
   customElements.define("inspector-toolbar", InspectorToolbar);
