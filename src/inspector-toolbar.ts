@@ -388,13 +388,10 @@ export class InspectorToolbar extends HTMLElement {
 
       const messageHandler: AIMessageHandler = {
         onData: (data: SendMessageResponse) => {
-          console.log('SSE data received:', data)
-          
           if (data.type === 'claude_json') {
             this.hideProcessingIndicator()
             this.displayJsonMessage(data.claudeJson)
           } else if (data.type === 'complete') {
-            console.log('AI request completed with session ID:', data.sessionId)
             if (promptInput) promptInput.value = ''
             this.setProcessingState(false)
           }

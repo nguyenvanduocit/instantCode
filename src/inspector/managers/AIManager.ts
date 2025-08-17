@@ -104,7 +104,6 @@ export class AIManager {
           // Update global session ID when received in response
           if ((data.type === 'claude_json' || data.type === 'claude_response' || data.type === 'complete') && data.sessionId) {
             this.globalSessionId = data.sessionId
-            console.log('Session ID updated:', this.globalSessionId)
           }
           
           handler.onData(data)

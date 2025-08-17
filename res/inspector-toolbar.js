@@ -2906,7 +2906,6 @@
             console.log(`\u{1F4E5} [CLIENT ${this.clientId}] SSE data received:`, data);
             if ((data.type === "claude_json" || data.type === "claude_response" || data.type === "complete") && data.sessionId) {
               this.globalSessionId = data.sessionId;
-              console.log("Session ID updated:", this.globalSessionId);
             }
             handler.onData(data);
             if (data.type === "complete") {
@@ -4378,12 +4377,10 @@
         this.setProcessingState(true);
         const messageHandler = {
           onData: (data) => {
-            console.log("SSE data received:", data);
             if (data.type === "claude_json") {
               this.hideProcessingIndicator();
               this.displayJsonMessage(data.claudeJson);
             } else if (data.type === "complete") {
-              console.log("AI request completed with session ID:", data.sessionId);
               if (promptInput) promptInput.value = "";
               this.setProcessingState(false);
             }
