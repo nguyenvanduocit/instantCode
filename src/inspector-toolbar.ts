@@ -487,7 +487,10 @@ export class InspectorToolbar extends HTMLElement {
 
 
   connectedCallback(): void {
-    this.aiManager.initialize(this.aiEndpoint)
+    // Only initialize if not already initialized to prevent duplicates
+    if (!this.aiManager.isInitialized()) {
+      this.aiManager.initialize(this.aiEndpoint)
+    }
     this.events.emit('session:updated', { sessionId: this.aiManager.getSessionId() })
   }
 

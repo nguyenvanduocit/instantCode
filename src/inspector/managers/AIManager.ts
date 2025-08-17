@@ -76,6 +76,13 @@ export class AIManager {
       throw new Error('tRPC client not initialized')
     }
 
+    // Cancel any existing subscription to prevent duplicates
+    if (this.currentSubscription) {
+      console.log('Cancelling existing subscription before creating new one')
+      this.currentSubscription.unsubscribe()
+      this.currentSubscription = null
+    }
+
     const structuredInput: SendMessageInput = {
       userPrompt,
       selectedElements,

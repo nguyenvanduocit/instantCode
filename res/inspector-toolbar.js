@@ -2885,6 +2885,11 @@
       if (!this.trpcClient) {
         throw new Error("tRPC client not initialized");
       }
+      if (this.currentSubscription) {
+        console.log("Cancelling existing subscription before creating new one");
+        this.currentSubscription.unsubscribe();
+        this.currentSubscription = null;
+      }
       const structuredInput = {
         userPrompt,
         selectedElements,
@@ -4211,7 +4216,6 @@
     attachDOMEventListeners() {
       if (!this.shadowRoot) return;
       const toggleButton = this.shadowRoot.getElementById("toggleButton");
-      const toolbarCard = this.shadowRoot.getElementById("toolbarCard");
       const inspectButton = this.shadowRoot.getElementById("inspectButton");
       const clearElementButton = this.shadowRoot.getElementById("clearElementButton");
       const closeInspectButton = this.shadowRoot.getElementById("closeInspectButton");
@@ -4447,7 +4451,9 @@
       }
     }
     connectedCallback() {
-      this.aiManager.initialize(this.aiEndpoint);
+      if (!this.aiManager.isInitialized()) {
+        this.aiManager.initialize(this.aiEndpoint);
+      }
       this.events.emit("session:updated", { sessionId: this.aiManager.getSessionId() });
     }
     disconnectedCallback() {
