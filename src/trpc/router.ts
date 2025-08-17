@@ -144,7 +144,7 @@ export const appRouter = router({
         } as SendMessageResponse
       } catch (error) {
         // Check if the error is due to cancellation
-        if (error instanceof Error && error.name === 'AbortError') {
+        if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('aborted'))) {
           console.log('Claude processing was cancelled')
           yield {
             type: 'progress',
