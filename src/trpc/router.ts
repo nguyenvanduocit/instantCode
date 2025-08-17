@@ -44,7 +44,7 @@ export const appRouter = router({
       console.log(`📤 [SERVER ${subscriptionId}] Sent connection message`)
 
       const componentLocations = extractComponentLocationsFromElements(input.selectedElements)
-      const formattedPrompt = formatAIPrompt(input.userPrompt, input.selectedElements, input.pageInfo)
+      const formattedPrompt = formatAIPrompt(input.userPrompt, input.selectedElements, input.pageInfo, input.consoleErrors)
 
       console.log('Received structured input:', {
         userPrompt: input.userPrompt.substring(0, 100) + '...',
@@ -136,7 +136,19 @@ export const appRouter = router({
             yield {
               type: 'claude_response',
               message: 'Claude analysis complete',
-              claudeResponse: JSON.stringify(message),
+              claudeResponse: {
+                type: 'claude_response',
+                result: (message as any).result || 'Task completed',
+                duration_ms: message.duration_ms,
+                duration_api_ms: message.duration_api_ms,
+                num_turns: message.num_turns,
+                total_cost_usd: message.total_cost_usd,
+                session_id: message.session_id,
+                usage: message.usage,
+                is_error: message.is_error,
+                subtype: message.subtype,
+                permission_denials: message.permission_denials,
+              },
               sessionId: currentSessionId,
             } as SendMessageResponse
           } else if (message.type === "result" && message.is_error) {
@@ -239,7 +251,7 @@ function extractComponentLocationsFromElements(elements: ElementData[]): string[
   return componentLocations
 }
 
-function formatAIPrompt(userPrompt: string, selectedElements: ElementData[], pageInfo: PageInfo): string {
+function formatAIPrompt(userPrompt: string, selectedElements: ElementData[], pageInfo: PageInfo, consoleErrors?: string[]): string {
   let formattedPrompt = `<userRequest>${userPrompt}</userRequest>`
 
   const replacer = (_key: string, value: any) => {
@@ -255,6 +267,10 @@ function formatAIPrompt(userPrompt: string, selectedElements: ElementData[], pag
 
   if (selectedElements && selectedElements.length > 0) {
     formattedPrompt += `<inspectedElements>${JSON.stringify(selectedElements, replacer)}</inspectedElements>`
+  }
+
+  if (consoleErrors && consoleErrors.length > 0) {
+    formattedPrompt += `<consoleErrors>${JSON.stringify(consoleErrors, replacer)}</consoleErrors>`
   }
 
   return formattedPrompt

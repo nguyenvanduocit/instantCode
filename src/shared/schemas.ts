@@ -25,6 +25,9 @@ export const StructuredMessageSchema = z.object({
   pageInfo: PageInfoSchema,
   cwd: z.string().optional(),
   sessionId: z.string().optional(),
+  consoleErrors: z.array(z.string()).optional(),
+  consoleWarnings: z.array(z.string()).optional(),
+  consoleInfo: z.array(z.string()).optional(),
 })
 
 export const SendMessageResponseSchema = z.discriminatedUnion('type', [
@@ -47,7 +50,27 @@ export const SendMessageResponseSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('claude_response'),
     message: z.string(),
-    claudeResponse: z.string().optional(),
+    claudeResponse: z.object({
+      result: z.string().optional(),
+      duration_ms: z.number().optional(),
+      duration_api_ms: z.number().optional(),
+      num_turns: z.number().optional(),
+      total_cost_usd: z.number().optional(),
+      session_id: z.string().optional(),
+      usage: z.object({
+        input_tokens: z.number().optional(),
+        cache_creation_input_tokens: z.number().optional(),
+        cache_read_input_tokens: z.number().optional(),
+        output_tokens: z.number().optional(),
+        server_tool_use: z.object({
+          web_search_requests: z.number().optional(),
+        }).optional(),
+        service_tier: z.string().optional(),
+      }).optional(),
+      is_error: z.boolean().optional(),
+      subtype: z.string().optional(),
+      permission_denials: z.array(z.any()).optional(),
+    }).optional(),
     sessionId: z.string().optional(),
   }),
   z.object({

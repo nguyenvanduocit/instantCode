@@ -1,11 +1,42 @@
 /**
  * UI rendering, styling, and message formatting for the inspector toolbar
+ * 
+ * Message Flow:
+ * 1. createMessage() - Creates new message HTML
+ * 2. updateMessage() - Updates existing message by ID
+ * 3. formatPrompt() - Formats user input with context
+ * 4. shouldShowMessage() - Determines if message should be displayed
+ * 5. clearMessages() - Clears message history
  */
 
 import { HtmlUtils } from '../utils/html'
 import type { ElementData, PageInfo } from '../shared/types'
 
-// CSS Styles
+// Configuration constants
+const CONFIG = {
+  MAX_CONTENT_LENGTH: 10000,
+  MAX_RESULT_LENGTH: 10000,
+  MAX_INPUT_DISPLAY: 10000,
+  MESSAGE_HISTORY_LIMIT: 10,
+  ANIMATION_DURATIONS: {
+    GRADIENT_SHIFT: '7.3s',
+    GLOWING_AURA: '9.7s',
+    ROTATE_MIST: '13.5s',
+    BLINK_EYE: '5s'
+  }
+} as const
+
+
+interface ToolCallState {
+  id: string
+  name: string
+  input?: any
+  status: 'pending' | 'completed' | 'error'
+}
+
+// CSS Styles organized by component
+
+// Combined styles for the toolbar
 export const TOOLBAR_STYLES = `
   :host {
     position: fixed;
@@ -47,6 +78,28 @@ export const TOOLBAR_STYLES = `
     100% { box-shadow: 0 0 10px 5px rgba(255, 107, 107, 0.4), 0 0 20px 10px rgba(255, 150, 113, 0.2), 0 0 0 2px rgba(255, 255, 255, 0.1); }
   }
 
+  @keyframes rotateMist {
+    0% { transform: rotate(0deg) scale(1); }
+    17% { transform: rotate(83deg) scale(1.15) translateX(3px); }
+    31% { transform: rotate(127deg) scale(0.95) translateY(-4px); }
+    48% { transform: rotate(195deg) scale(1.12) translateX(-2px) translateY(3px); }
+    63% { transform: rotate(246deg) scale(1.05) translateY(5px); }
+    79% { transform: rotate(301deg) scale(0.97) translateX(4px) translateY(-2px); }
+    91% { transform: rotate(342deg) scale(1.08) translateY(-3px); }
+    100% { transform: rotate(360deg) scale(1); }
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.8; }
+    50% { opacity: 1; }
+  }
+
+  @keyframes dots {
+    0%, 20% { content: ''; }
+    40% { content: '.'; }
+    60% { content: '..'; }
+    80%, 100% { content: '...'; }
+  }
   .toolbar-button {
     width: 50px;
     height: 50px;
@@ -342,6 +395,7 @@ export const TOOLBAR_STYLES = `
     border-radius: 6px;
     background: white;
     max-height: 400px;
+    width: 380px;
     display: none;
   }
 
@@ -382,7 +436,7 @@ export const TOOLBAR_STYLES = `
 
   .json-content {
     max-height: 350px;
-    overflow-y: auto;
+    overflow: auto;
     padding: 4px;
   }
 
@@ -500,9 +554,53 @@ export const TOOLBAR_STYLES = `
     margin-bottom: 0;
   }
 
+  .json-message .tool-combined {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 6px 8px;
+    margin: 2px 0;
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    line-height: 1.3;
+  }
+
+  .json-message .tool-section {
+    margin: 3px 0;
+    padding: 2px 0;
+  }
+
+  .json-message .tool-section:not(:last-child) {
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 4px;
+  }
+
+  .json-message[data-tool-call-id] {
+    position: relative;
+    transition: all 0.3s ease;
+  }
+
+  .json-message[data-tool-call-id] .message-badge {
+    transition: all 0.3s ease;
+  }
+
+  .json-message[data-tool-call-id]:has(.message-content:contains("Running")) .message-badge {
+    background: #f59e0b;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes toolPulse {
+    0%, 100% { opacity: 0.8; }
+    50% { opacity: 1; }
+  }
+
   .toolbar-card.processing .toolbar-input,
   .toolbar-card.processing .toolbar-actions {
     display: none;
+  }
+
+  .toolbar-card.processing .new-chat-button {
+    display: none !important;
   }
 
   .processing-indicator {
@@ -536,70 +634,88 @@ export const TOOLBAR_STYLES = `
   }
 `
 
-// UI Renderer
-export class UIRenderer {
-  static renderToolbar(): string {
-    return `
-      <style>
-        ${TOOLBAR_STYLES}
-      </style>
+/**
+ * Render the complete toolbar HTML structure
+ */
+export function renderToolbar(): string {
+  return `
+    <style>
+${TOOLBAR_STYLES}
+    </style>
 
-      <div class="toolbar-button" id="toggleButton">
-        <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
-          <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
-          <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
-        </svg>
-      </div>
+    <div class="toolbar-button" id="toggleButton">
+      <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+        <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
+        <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
+      </svg>
+    </div>
 
-      <div class="toolbar-card" id="toolbarCard">
-        <div class="toolbar-header">
-          <div class="session-info" id="sessionInfo">
-            <span class="session-label">Session:</span>
-            <span class="session-id" id="sessionId">-</span>
-            <button class="action-button cancel-button" id="cancelButton">
-              <span>Cancel</span>
-            </button>
-            <button class="action-button new-chat-button" id="newChatButton">
-              <span>New Chat</span>
-            </button>
-          </div>
-          <textarea rows="2" autocomplete="off" type="text" class="toolbar-input" id="promptInput" placeholder="Type your prompt then press Enter"></textarea>
-        </div>
-        
-        <div class="toolbar-actions">
-          <button class="action-button inspect-button" id="inspectButton">
-            <span>Inspect</span>
-          </button>
-          <button class="action-button clear-button" id="clearElementButton">
-            <span>Clear</span>
-          </button>
-          <button class="action-button close-button" id="closeInspectButton">
+    <div class="toolbar-card" id="toolbarCard">
+      <div class="toolbar-header">
+        <div class="session-info" id="sessionInfo">
+          <span class="session-label">Session:</span>
+          <span class="session-id" id="sessionId">-</span>
+          <button class="action-button cancel-button" id="cancelButton">
             <span>Cancel</span>
           </button>
+          <button class="action-button new-chat-button" id="newChatButton">
+            <span>New Chat</span>
+          </button>
         </div>
-        
-        <div class="processing-indicator" id="processingIndicator">
-          <div>🔄 Processing with Claude<span class="processing-dots"></span></div>
-        </div>
-        
-        <div class="json-display" id="jsonDisplay">
-          <div class="json-header">
-            <span>Claude Code Messages</span>
-            <button class="json-clear-button" id="jsonClearButton">Clear</button>
-          </div>
-          <div class="json-content" id="jsonContent"></div>
-        </div>
+        <textarea rows="2" autocomplete="off" type="text" class="toolbar-input" id="promptInput" placeholder="Type your prompt then press Enter"></textarea>
       </div>
-    `
-  }
+
+      <div class="toolbar-actions">
+        <button class="action-button inspect-button" id="inspectButton">
+          <span>Inspect</span>
+        </button>
+        <button class="action-button clear-button" id="clearElementButton">
+          <span>Clear</span>
+        </button>
+        <button class="action-button close-button" id="closeInspectButton">
+          <span>Cancel</span>
+        </button>
+      </div>
+
+      <div class="processing-indicator" id="processingIndicator">
+        <div>🔄 Processing with Claude<span class="processing-dots"></span></div>
+      </div>
+
+      <div class="json-display" id="jsonDisplay">
+        <div class="json-content" id="jsonContent"></div>
+      </div>
+    </div>
+  `
 }
 
-// Message Formatter
-export class MessageFormatter {
-  private lastMessageHash: string = ''
-  private messageHistory: Set<string> = new Set()
+// ===============================
+// MESSAGE OPERATIONS - CLEAR FLOW
+// ===============================
 
-  formatPrompt(userPrompt: string, selectedElements: ElementData[], pageInfo: PageInfo): string {
+/**
+ * Simple interface for message operations
+ */
+export interface MessageFormatter {
+  formatPrompt(userPrompt: string, selectedElements: ElementData[], pageInfo: PageInfo): string
+  shouldShowMessage(jsonData: any): boolean
+  createMessage(data: any): string | { html: string, toolCallId?: string } | null
+  updateMessage(toolCallId: string, result: any): string | null
+  clearMessages(): void
+}
+
+/**
+ * Create message manager with clear operations
+ */
+export function createMessageFormatter(): MessageFormatter {
+  // State management
+  let lastMessageHash = ''
+  let messageHistory = new Set<string>()
+  let pendingToolCalls = new Map<string, ToolCallState>()
+
+  // ===================
+  // 1. FORMAT USER INPUT
+  // ===================
+  function formatPrompt(userPrompt: string, selectedElements: ElementData[], pageInfo: PageInfo): string {
     let formattedPrompt = `<userRequest>${userPrompt}</userRequest>`
 
     const replacer = (_key: string, value: any) => {
@@ -620,77 +736,268 @@ export class MessageFormatter {
     return formattedPrompt
   }
 
-  shouldDisplayMessage(jsonData: any): boolean {
-    const messageHash = this.hashMessage(jsonData)
-    
-    if (messageHash === this.lastMessageHash) {
-      return false
-    }
-    
-    if (jsonData.type === 'assistant' && this.messageHistory.has(messageHash)) {
-      return false
-    }
-    
-    this.lastMessageHash = messageHash
+  // ========================
+  // 2. CHECK MESSAGE DISPLAY
+  // ========================
+  function shouldShowMessage(jsonData: any): boolean {
+    // Always show messages that don't have a hash (empty content)
+    const messageHash = hashMessage(jsonData)
+    if (!messageHash) return true
+
+    // Skip exact consecutive duplicates
+    if (messageHash === lastMessageHash) return false
+
+    // Only check history for assistant messages to prevent duplicate streaming
+    if (jsonData.type === 'assistant' && messageHistory.has(messageHash)) return false
+
+    // Track message
+    lastMessageHash = messageHash
     if (jsonData.type === 'assistant') {
-      this.messageHistory.add(messageHash)
-      if (this.messageHistory.size > 10) {
-        const firstHash = this.messageHistory.values().next().value
-        if (firstHash) {
-          this.messageHistory.delete(firstHash)
-        }
+      messageHistory.add(messageHash)
+      if (messageHistory.size > CONFIG.MESSAGE_HISTORY_LIMIT) {
+        const firstHash = messageHistory.values().next().value
+        if (firstHash) messageHistory.delete(firstHash)
       }
     }
-    
+
+    // Always show non-assistant messages (including Claude JSON responses)
     return true
   }
 
-  formatClaudeMessage(data: any): string {
+  // ==================
+  // 3. CREATE MESSAGE
+  // ==================
+  function createMessage(data: any): string | { html: string, toolCallId?: string } | null {
     try {
-      let content = ''
-      let meta = ''
-      let badge = ''
-
-      if (data.type === 'assistant' && data.message?.content) {
-        const extracted = this.extractAssistantContent(data.message.content)
-        content = extracted.text
-        badge = extracted.badge || ''
-        if (data.message?.usage) {
-          const usage = data.message.usage
-          meta = `${usage.input_tokens || 0}↑ ${usage.output_tokens || 0}↓`
-        }
-      } else if (data.type === 'user' && data.message?.content) {
-        const extracted = this.extractUserContent(data.message.content)
-        content = extracted.text
-        badge = extracted.badge || ''
+      // Handle different message types clearly
+      if (data.type === 'assistant') {
+        return createAssistantMessage(data)
+      } else if (data.type === 'user') {
+        return createUserMessage(data)
       } else if (data.type === 'system') {
-        content = `System: ${data.subtype || 'message'}`
-        badge = '⚙️ System'
-        if (data.cwd) meta = `${data.cwd}`
+        return createSystemMessage(data)
       } else if (data.type === 'result') {
-        content = data.result || 'Task completed'
-        badge = '✅ Result'
-        if (data.duration_ms) meta = `${data.duration_ms}ms`
+        return createResultMessage(data)
+      } else if (data.type === 'claude_response') {
+        return createClaudeResponseMessage(data)
       } else {
-        content = JSON.stringify(data, null, 1)
+        return createFallbackMessage(data)
       }
-
-      const badgeHtml = badge ? `<div class="message-badge">${HtmlUtils.escapeHtml(badge)}</div>` : ''
-      return `<div class="message-wrapper">${badgeHtml}<div class="message-content">${HtmlUtils.escapeHtml(content)}</div>${meta ? `<div class="message-meta">${meta}</div>` : ''}</div>`
     } catch (error) {
-      console.error('Error formatting Claude message:', error)
-      return `<div class="message-content">${HtmlUtils.escapeHtml(JSON.stringify(data))}</div>`
+      console.error('Error creating message:', error)
+      return createErrorMessage(data)
     }
   }
 
-  private extractAssistantContent(content: any[]): { text: string, badge?: string } {
+  // ==================
+  // 4. UPDATE MESSAGE
+  // ==================
+  function updateMessage(toolCallId: string, result: any): string | null {
+    const toolCall = pendingToolCalls.get(toolCallId)
+    if (!toolCall) return null
+
+    pendingToolCalls.delete(toolCallId)
+    return formatToolComplete(toolCall, result)
+  }
+
+  // =================
+  // 5. CLEAR MESSAGES
+  // =================
+  function clearMessages(): void {
+    lastMessageHash = ''
+    messageHistory.clear()
+    pendingToolCalls.clear()
+  }
+
+  // ===============================
+  // HELPER FUNCTIONS - MESSAGE TYPES
+  // ===============================
+  function createAssistantMessage(data: any): string | { html: string, toolCallId?: string } | null {
+    if (!data.message?.content) return null
+
+    const extracted = extractContentFromAssistant(data.message.content)
+
+    // Handle tool calls - show as pending
+    if (extracted.toolCall) {
+      const toolCall = extracted.toolCall
+      pendingToolCalls.set(toolCall.id, {
+        id: toolCall.id,
+        name: toolCall.name,
+        input: toolCall.input,
+        status: 'pending'
+      })
+
+      return {
+        html: formatToolPending(toolCall),
+        toolCallId: toolCall.id
+      }
+    }
+
+    // Regular assistant message - escape HTML for safety
+    const meta = data.message?.usage ?
+      `${data.message.usage.input_tokens || 0}↑ ${data.message.usage.output_tokens || 0}↓` : ''
+
+    return formatMessage(HtmlUtils.escapeHtml(extracted.text), extracted.badge, meta)
+  }
+
+  function createUserMessage(data: any): string | { html: string, toolCallId?: string } | null {
+    if (!data.message?.content) return null
+
+    const extracted = extractContentFromUser(data.message.content)
+
+    // Handle tool results - update existing message
+    if (extracted.toolResult) {
+      const toolCallId = extracted.toolResult.tool_use_id
+      if (pendingToolCalls.has(toolCallId)) {
+        const toolCall = pendingToolCalls.get(toolCallId)!
+        pendingToolCalls.delete(toolCallId)
+
+        return {
+          html: formatToolComplete(toolCall, extracted.toolResult),
+          toolCallId: toolCallId
+        }
+      }
+    }
+
+    // Escape HTML for user messages
+    return formatMessage(HtmlUtils.escapeHtml(extracted.text), extracted.badge)
+  }
+
+  function createSystemMessage(data: any): string {
+    const content = `System: ${data.subtype || 'message'}`
+    const meta = data.cwd ? data.cwd : ''
+    return formatMessage(HtmlUtils.escapeHtml(content), 'System', meta)
+  }
+
+  function createResultMessage(data: any): string {
+    const content = data.result || 'Task completed'
+    const meta = data.duration_ms ? `${data.duration_ms}ms` : ''
+    return formatMessage(HtmlUtils.escapeHtml(content), 'Result', meta)
+  }
+
+  function createClaudeResponseMessage(response: any): string {
+
+    // Create a summary content showing key metrics instead of the full text result
+    let content = ''
+    // Show timing information
+    if (response.duration_ms) {
+      content += `<strong>Total Time:</strong> ${response.duration_ms}ms`
+      if (response.duration_api_ms) {
+        content += ` (API: ${response.duration_api_ms}ms)`
+      }
+      content += '<br>'
+    }
+
+    // Show cost information
+    if (response.total_cost_usd) {
+      content += `<strong>Cost:</strong> $${response.total_cost_usd.toFixed(4)}<br>`
+    }
+
+    // Show token usage
+    if (response.usage) {
+      const usage = response.usage
+      const tokens = []
+      if (usage.input_tokens) tokens.push(`${usage.input_tokens}↑`)
+      if (usage.output_tokens) tokens.push(`${usage.output_tokens}↓`)
+      if (usage.cache_read_input_tokens) tokens.push(`${usage.cache_read_input_tokens}(cached)`)
+      if (tokens.length > 0) {
+        content += `<strong>Tokens:</strong> ${tokens.join(' ')}<br>`
+      }
+    }
+
+    // Show turn count
+    if (response.num_turns) {
+      content += `<strong>Turns:</strong> ${response.num_turns}<br>`
+    }
+
+    // Build metadata string for the message badge area
+    const metaParts = []
+    if (response.duration_ms) metaParts.push(`${response.duration_ms}ms`)
+    if (response.total_cost_usd) metaParts.push(`$${response.total_cost_usd.toFixed(4)}`)
+
+    return formatMessage(content, 'Claude Complete', metaParts.join(' • '))
+  }
+
+  function createFallbackMessage(data: any): string {
+    // For Claude JSON responses that don't match known types
+    // Display them in a readable format
+    const content = typeof data === 'string'
+      ? data
+      : JSON.stringify(data, null, 2)
+
+    // Truncate if too long but ensure we always show something
+    const displayContent = content.length > CONFIG.MAX_CONTENT_LENGTH
+      ? content.substring(0, CONFIG.MAX_CONTENT_LENGTH) + '...'
+      : content
+
+    // Wrap JSON in a pre/code block for better formatting
+    const formattedContent = typeof data === 'object'
+      ? `<pre style="background:#f5f5f5;padding:6px;border-radius:4px;overflow-x:auto;font-size:8px"><code>${HtmlUtils.escapeHtml(displayContent)}</code></pre>`
+      : HtmlUtils.escapeHtml(displayContent)
+
+    return formatMessage(formattedContent, 'Claude')
+  }
+
+  function createErrorMessage(data: any): string {
+    const errorContent = `<pre style="background:#fee;padding:6px;border-radius:4px;overflow-x:auto;font-size:8px"><code>${HtmlUtils.escapeHtml(JSON.stringify(data))}</code></pre>`
+    return formatMessage(errorContent, 'Error')
+  }
+
+  // ===============================
+  // FORMATTING UTILITIES
+  // ===============================
+  function formatMessage(content: string, badge?: string, meta?: string): string {
+    const badgeHtml = badge ? `<div class="message-badge">${HtmlUtils.escapeHtml(badge)}</div>` : ''
+    const metaHtml = meta ? `<div class="message-meta">${meta}</div>` : ''
+    // Don't escape HTML in content since we're now using HTML formatting
+    return `<div class="message-wrapper">${badgeHtml}<div class="message-content">${content}</div>${metaHtml}</div>`
+  }
+
+  function formatToolPending(toolCall: any): string {
+    let content = `<strong>${HtmlUtils.escapeHtml(toolCall.name)}</strong>`
+    if (toolCall.input) {
+      const inputStr = JSON.stringify(toolCall.input, null, 2)
+      const truncatedInput = inputStr.length > CONFIG.MAX_CONTENT_LENGTH ? inputStr.substring(0, CONFIG.MAX_CONTENT_LENGTH) + '...' : inputStr
+      content += `<br><strong>Input:</strong><br><pre style="background:#f5f5f5;padding:6px;border-radius:4px;overflow-x:auto;font-size:8px"><code>${HtmlUtils.escapeHtml(truncatedInput)}</code></pre>`
+    }
+    content += `<br>Running...`
+
+    return formatMessage(content, 'Tool Running')
+  }
+
+  function formatToolComplete(toolCall: ToolCallState, result: any): string {
+    let content = `<strong>${HtmlUtils.escapeHtml(toolCall.name)}</strong>`
+
+    if (toolCall.input) {
+      const inputStr = JSON.stringify(toolCall.input, null, 2)
+      const truncatedInput = inputStr.length > CONFIG.MAX_CONTENT_LENGTH ? inputStr.substring(0, CONFIG.MAX_CONTENT_LENGTH) + '...' : inputStr
+      content += `<br><strong>Input:</strong><br><pre style="background:#f5f5f5;padding:6px;border-radius:4px;overflow-x:auto;font-size:8px"><code>${HtmlUtils.escapeHtml(truncatedInput)}</code></pre>`
+    }
+
+    // Add result
+    const resultContent = typeof result.content === 'string' ? result.content : JSON.stringify(result.content)
+    if (result.is_error) {
+      content += `<br><strong>Error:</strong> ${HtmlUtils.escapeHtml(resultContent || 'Unknown error')}`
+    } else if (resultContent && resultContent.trim()) {
+      const truncatedResult = resultContent.length > CONFIG.MAX_RESULT_LENGTH ? resultContent.substring(0, CONFIG.MAX_RESULT_LENGTH) + '...' : resultContent
+      content += `<strong>Output:</strong><br><pre style="background:#f5f5f5;padding:6px;border-radius:4px;overflow-x:auto;font-size:8px"><code>${HtmlUtils.escapeHtml(truncatedResult)}</code></pre>`
+    } else {
+      content += `<strong>Output:</strong><br>[done]`
+    }
+
+    const badge = result.is_error ? 'Tool Error' : 'Tool Complete'
+    return formatMessage(content, badge)
+  }
+
+  function extractContentFromAssistant(content: any[]): { text: string, badge?: string, toolCall?: any } {
     const items = content.map(item => {
       if (item.type === 'text') {
         return { text: item.text, badge: undefined }
       } else if (item.type === 'tool_use') {
         return { 
           text: `${item.name}${item.input ? ': ' + JSON.stringify(item.input).substring(0, 100) + '...' : ''}`,
-          badge: '🔧 Edit'
+          badge: 'Edit',
+          toolCall: item
         }
       }
       return { text: '', badge: undefined }
@@ -702,46 +1009,50 @@ export class MessageFormatter {
     if (toolUseItem) {
       return {
         text: items.map(item => item.text).join('\n'),
-        badge: toolUseItem.badge
+        badge: toolUseItem.badge,
+        toolCall: toolUseItem.toolCall
       }
     }
     
     return { text: items.map(item => item.text).join('\n') }
   }
 
-  private extractUserContent(content: any[]): { text: string, badge?: string } {
+  function extractContentFromUser(content: any[]): { text: string, badge?: string, toolResult?: any } {
     const items = content.map(item => {
       if (item.type === 'text') {
         return { text: item.text, badge: undefined }
       } else if (item.type === 'tool_result') {
         const result = typeof item.content === 'string' ? item.content : JSON.stringify(item.content)
         return { 
-          text: `${result.substring(0, 150)}${result.length > 150 ? '...' : ''}`,
-          badge: '📤 Tool result'
+          text: `${result.substring(0, CONFIG.MAX_INPUT_DISPLAY)}${result.length > CONFIG.MAX_INPUT_DISPLAY ? '...' : ''}`,
+          badge: 'Tool result',
+          toolResult: item
         }
       }
       return { text: '', badge: undefined }
-    }).filter(item => item.text)
+    })
     
-    if (items.length === 0) return { text: '' }
-    
-    const toolResultItem = items.find(item => item.badge)
+    const toolResultItem = items.find(item => item.toolResult)
     if (toolResultItem) {
       return {
-        text: items.map(item => item.text).join('\n'),
-        badge: toolResultItem.badge
+        text: items.filter(item => item.text).map(item => item.text).join('\n'),
+        badge: toolResultItem.badge,
+        toolResult: toolResultItem.toolResult
       }
     }
-    
-    return { text: items.map(item => item.text).join('\n') }
+
+    const filteredItems = items.filter(item => item.text)
+    if (filteredItems.length === 0) return { text: '' }
+
+    return { text: filteredItems.map(item => item.text).join('\n') }
   }
 
-  private hashMessage(jsonData: any): string {
+  function hashMessage(jsonData: any): string {
     let content = ''
     if (jsonData.type === 'assistant' && jsonData.message?.content) {
-      content = this.extractAssistantContent(jsonData.message.content).text
+      content = extractContentFromAssistant(jsonData.message.content).text
     } else if (jsonData.type === 'user' && jsonData.message?.content) {
-      content = this.extractUserContent(jsonData.message.content).text
+      content = extractContentFromUser(jsonData.message.content).text
     } else {
       content = JSON.stringify(jsonData)
     }
@@ -749,8 +1060,12 @@ export class MessageFormatter {
     return HtmlUtils.hashString(content || '')
   }
 
-  clearHistory(): void {
-    this.lastMessageHash = ''
-    this.messageHistory.clear()
+  // Return the clean interface
+  return {
+    formatPrompt,
+    shouldShowMessage,
+    createMessage,
+    updateMessage,
+    clearMessages
   }
 }

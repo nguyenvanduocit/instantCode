@@ -1,8 +1,11 @@
 {
-  "name": "frontend-context-server",
+  "name": "instantcode",
   "version": "1.0.0",
-  "description": "Standalone server for Frontend Context - Pick elements and send context to AI",
+  "description": "AI-powered web inspection tool - Pick elements and get instant AI assistance",
   "main": "dist/index.js",
+  "bin": {
+    "instantcode": "./dist/index.js"
+  },
   "scripts": {
     "build": "tsc",
     "build:inspector": "node build-inspector.js",
@@ -10,17 +13,35 @@
     "dev": "bun src/index.ts",
     "start": "node dist/index.js",
     "clean": "rm -rf dist",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run clean && npm run build:all"
   },
+  "files": [
+    "dist/**/*",
+    "res/**/*",
+    "README.md",
+    "CLAUDE.md"
+  ],
   "keywords": [
     "frontend",
     "ai",
     "element-picker",
     "web-development",
-    "server"
+    "server",
+    "inspector",
+    "debugging",
+    "claude"
   ],
   "author": "Nguyen Van Duoc <nguyenvanduocit@gmail.com>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nguyenvanduocit/instantCode.git"
+  },
+  "homepage": "https://github.com/nguyenvanduocit/instantCode#readme",
+  "bugs": {
+    "url": "https://github.com/nguyenvanduocit/instantCode/issues"
+  },
   "dependencies": {
     "@anthropic-ai/claude-code": "^1.0.83",
     "@trpc/client": "^11.4.4",

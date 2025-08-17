@@ -1,0 +1,10 @@
+src/
+.github/
+node_modules/
+*.log
+.DS_Store
+tsconfig*.json
+build-inspector.js
+test-*.ts
+bun.lock
+.gitignore

@@ -1,23 +1,26 @@
 /**
- * Refactored InspectorToolbar using event-driven architecture
+ * Functional InspectorToolbar with minimal class usage
  */
 
 import type { ElementData, PageInfo, SendMessageResponse } from './shared/types'
-import { ElementSelectionManager, AIManager, InspectionManager, ToolbarStateManager, type AIMessageHandler } from './inspector/managers'
-import { ComponentDetector } from './inspector/detectors'
-import { UIRenderer, MessageFormatter } from './inspector/ui'
-import { ToolbarEventEmitter } from './inspector/events'
+import { createAIManager, type AIManager, type AIMessageHandler } from './inspector/ai'
+import { createElementSelectionManager, type ElementSelectionManager } from './inspector/selection'
+import { createInspectionManager, type InspectionManager } from './inspector/inspection'
+import { createToolbarStateManager, type ToolbarStateManager } from './inspector/state'
+import { findNearestComponent } from './inspector/detectors'
+import { renderToolbar, createMessageFormatter, type MessageFormatter } from './inspector/ui'
+import { createToolbarEventEmitter, type ToolbarEventEmitter } from './inspector/events'
 
 export class InspectorToolbar extends HTMLElement {
   // Event-driven architecture
-  private events = new ToolbarEventEmitter()
-  private stateManager = new ToolbarStateManager(this.events)
+  private events = createToolbarEventEmitter()
+  private stateManager: ToolbarStateManager
   
   // Managers
-  private selectionManager = new ElementSelectionManager()
-  private aiManager = new AIManager()
+  private selectionManager: ElementSelectionManager
+  private aiManager: AIManager
   private inspectionManager: InspectionManager
-  private messageFormatter = new MessageFormatter()
+  private messageFormatter: MessageFormatter
 
   // Event cleanup functions
   private cleanupFunctions: (() => void)[] = []
@@ -26,12 +29,16 @@ export class InspectorToolbar extends HTMLElement {
     super()
     this.attachShadow({ mode: 'open' })
     
-    // Initialize inspection manager with callbacks
-    this.inspectionManager = new InspectionManager(
+    // Initialize managers using factory functions
+    this.stateManager = createToolbarStateManager(this.events)
+    this.selectionManager = createElementSelectionManager()
+    this.aiManager = createAIManager()
+    this.inspectionManager = createInspectionManager(
       (element) => this.handleElementSelection(element),
       (element) => this.shouldIgnoreElement(element),
       (element) => this.selectionManager.hasElement(element)
     )
+    this.messageFormatter = createMessageFormatter()
     
     this.render()
     this.setupEventListeners()
@@ -64,7 +71,10 @@ export class InspectorToolbar extends HTMLElement {
 
   private render(): void {
     if (!this.shadowRoot) return
-    this.shadowRoot.innerHTML = UIRenderer.renderToolbar()
+    this.shadowRoot.innerHTML = renderToolbar()
+
+    // Set initial clear button visibility
+    this.updateClearButtonVisibility()
   }
 
   private setupEventListeners(): void {
@@ -87,7 +97,10 @@ export class InspectorToolbar extends HTMLElement {
       this.events.on('messages:add', (message) => this.displayMessage(message)),
       this.events.on('messages:clear', () => this.clearMessagesDisplay()),
       this.events.on('prompt:clear', () => this.clearPromptInput()),
-      this.events.on('selection:clear', () => this.selectionManager.clearAllSelections()),
+      this.events.on('selection:clear', () => {
+        this.selectionManager.clearAllSelections()
+        this.updateClearButtonVisibility()
+      }),
       this.events.on('notification:show', ({ message, type }) => {
         if (type === 'info') {
           this.showNotification(message, 'success') // Map info to success for now
@@ -158,7 +171,15 @@ export class InspectorToolbar extends HTMLElement {
   }
 
   private updateSelectionDisplay(): void {
-    // Could update selection count or other selection-related UI here
+    this.updateClearButtonVisibility()
+  }
+
+  private updateClearButtonVisibility(): void {
+    const clearElementButton = this.shadowRoot?.getElementById('clearElementButton')
+    if (clearElementButton) {
+      const hasSelectedElements = this.selectionManager.getSelectedCount() > 0
+      clearElementButton.style.display = hasSelectedElements ? 'inline-flex' : 'none'
+    }
   }
 
   private displayMessage(message: SendMessageResponse): void {
@@ -184,7 +205,6 @@ export class InspectorToolbar extends HTMLElement {
     const promptInput = this.shadowRoot.getElementById('promptInput') as HTMLTextAreaElement
     const newChatButton = this.shadowRoot.getElementById('newChatButton')
     const cancelButton = this.shadowRoot.getElementById('cancelButton')
-    const jsonClearButton = this.shadowRoot.getElementById('jsonClearButton')
 
     // Toggle expand/collapse
     toggleButton?.addEventListener('click', (evt) => {
@@ -238,13 +258,18 @@ export class InspectorToolbar extends HTMLElement {
 
     // New chat button
     newChatButton?.addEventListener('click', async () => {
+      // Prevent new chat while processing
+      if (this.stateManager.isProcessing()) {
+        console.log('Cannot start new chat while processing')
+        return
+      }
+
       if (promptInput) promptInput.value = ''
       this.selectionManager.clearAllSelections()
+      this.updateClearButtonVisibility()
       this.clearJsonDisplay()
-      
-      if (!this.stateManager.isProcessing()) {
-        this.events.emit('ui:enter-inspection', undefined)
-      }
+
+      this.events.emit('ui:enter-inspection', undefined)
 
       if (this.aiManager.isInitialized()) {
         try {
@@ -268,6 +293,7 @@ export class InspectorToolbar extends HTMLElement {
         // Start new chat after canceling
         if (promptInput) promptInput.value = ''
         this.selectionManager.clearAllSelections()
+        this.updateClearButtonVisibility()
         this.clearJsonDisplay()
         
         if (this.aiManager.isInitialized()) {
@@ -279,11 +305,6 @@ export class InspectorToolbar extends HTMLElement {
           }
         }
       }
-    })
-
-    // JSON clear button
-    jsonClearButton?.addEventListener('click', () => {
-      this.clearJsonDisplay()
     })
 
     // Handle prompt input
@@ -314,8 +335,9 @@ export class InspectorToolbar extends HTMLElement {
     if (this.selectionManager.hasElement(element)) {
       this.selectionManager.deselectElement(element)
     } else {
-      this.selectionManager.selectElement(element, ComponentDetector.findNearestComponent)
+      this.selectionManager.selectElement(element, findNearestComponent)
     }
+    this.updateClearButtonVisibility()
   }
 
   private shouldIgnoreElement(element: Element): boolean {
@@ -363,7 +385,7 @@ export class InspectorToolbar extends HTMLElement {
 
     const pageInfo = this.getCurrentPageInfo()
     const selectedElementsHierarchy = this.selectionManager.buildHierarchicalStructure(
-      ComponentDetector.findNearestComponent
+      findNearestComponent
     )
 
     if (this.aiEndpoint) {
@@ -401,6 +423,9 @@ export class InspectorToolbar extends HTMLElement {
           if (data.type === 'claude_json') {
             this.hideProcessingIndicator()
             this.displayJsonMessage(data.claudeJson)
+          } else if (data.type === 'claude_response') {
+            this.hideProcessingIndicator()
+            this.displayJsonMessage(data.claudeResponse)
           } else if (data.type === 'complete') {
             if (promptInput) promptInput.value = ''
             this.setProcessingState(false)
@@ -448,17 +473,53 @@ export class InspectorToolbar extends HTMLElement {
 
     if (!jsonDisplay || !jsonContent) return
 
-    if (!this.messageFormatter.shouldDisplayMessage(jsonData)) {
+    if (!this.messageFormatter.shouldShowMessage(jsonData)) {
+      return
+    }
+
+    const formattedMessage = this.messageFormatter.createMessage(jsonData)
+    if (!formattedMessage) {
       return
     }
     
     jsonDisplay.classList.add('show')
 
-    const messageElement = document.createElement('div')
-    messageElement.classList.add('json-message', jsonData.type || 'generic')
-    messageElement.innerHTML = this.messageFormatter.formatClaudeMessage(jsonData)
+    if (typeof formattedMessage === 'string') {
+      // Regular message
+      const messageElement = document.createElement('div')
+      messageElement.classList.add('json-message', jsonData.type || 'generic')
+      messageElement.innerHTML = formattedMessage
 
-    jsonContent.appendChild(messageElement)
+      jsonContent.appendChild(messageElement)
+    } else {
+      // Tool call message (pending or update)
+      const { html, toolCallId } = formattedMessage
+
+      if (toolCallId) {
+        // Check if this is an update to existing tool call
+        const existingElement = jsonContent.querySelector(`[data-tool-call-id="${toolCallId}"]`)
+        if (existingElement) {
+          // Update existing element
+          existingElement.innerHTML = html
+        } else {
+          // Create new element for pending tool call
+          const messageElement = document.createElement('div')
+          messageElement.classList.add('json-message', jsonData.type || 'generic')
+          messageElement.setAttribute('data-tool-call-id', toolCallId)
+          messageElement.innerHTML = html
+
+          jsonContent.appendChild(messageElement)
+        }
+      } else {
+    // Fallback to regular message
+        const messageElement = document.createElement('div')
+        messageElement.classList.add('json-message', jsonData.type || 'generic')
+        messageElement.innerHTML = html
+
+        jsonContent.appendChild(messageElement)
+      }
+    }
+
     jsonContent.scrollTop = jsonContent.scrollHeight
   }
 
@@ -470,7 +531,7 @@ export class InspectorToolbar extends HTMLElement {
 
     jsonContent.innerHTML = ''
     jsonDisplay.classList.remove('show')
-    this.messageFormatter.clearHistory()
+    this.messageFormatter.clearMessages()
   }
 
 

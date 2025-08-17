@@ -2563,6 +2563,292 @@
   var registerSymbol = SuperJSON.registerSymbol;
   var allowErrorProps = SuperJSON.allowErrorProps;
 
+  // src/inspector/console.ts
+  var globalConsoleErrors = [];
+  var globalConsoleWarnings = [];
+  var globalConsoleInfo = [];
+  var MAX_CONSOLE_MESSAGES = 50;
+  var consoleErrorCaptureInitialized = false;
+  var overridableFunctionNames = ["error", "warn", "info", "log", "assert"];
+  function addErrorToGlobalList(error) {
+    globalConsoleErrors.push(error);
+    if (globalConsoleErrors.length > MAX_CONSOLE_MESSAGES) {
+      globalConsoleErrors.shift();
+    }
+  }
+  function addWarningToGlobalList(warning) {
+    globalConsoleWarnings.push(warning);
+    if (globalConsoleWarnings.length > MAX_CONSOLE_MESSAGES) {
+      globalConsoleWarnings.shift();
+    }
+  }
+  function addInfoToGlobalList(info) {
+    globalConsoleInfo.push(info);
+    if (globalConsoleInfo.length > MAX_CONSOLE_MESSAGES) {
+      globalConsoleInfo.shift();
+    }
+  }
+  function serializeArgument(arg) {
+    if (typeof arg === "object") {
+      if (arg instanceof Error) {
+        return JSON.stringify(arg, Object.getOwnPropertyNames(arg));
+      }
+      try {
+        return JSON.stringify(arg, null, 2);
+      } catch {
+        return String(arg);
+      }
+    } else {
+      return String(arg);
+    }
+  }
+  function saveConsoleLog(functionName, args) {
+    const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+    const serializedArgs = args.map(serializeArgument).join("\n");
+    const logEntry = `[${functionName.toUpperCase()}] ${timestamp}
+Message: ${serializedArgs}
+---`;
+    switch (functionName) {
+      case "error":
+      case "assert":
+        addErrorToGlobalList(logEntry);
+        break;
+      case "warn":
+        addWarningToGlobalList(logEntry);
+        break;
+      case "info":
+      case "log":
+        addInfoToGlobalList(logEntry);
+        break;
+    }
+  }
+  function createConsoleProxy(originalFunction, functionName) {
+    const proxyHandler = {
+      apply: (target, thisArgument, argumentsList) => {
+        if (functionName === "assert" && argumentsList[0]) {
+          return target.apply(thisArgument, argumentsList);
+        }
+        saveConsoleLog(functionName, argumentsList);
+        return target.apply(thisArgument, argumentsList);
+      }
+    };
+    return new Proxy(originalFunction, proxyHandler);
+  }
+  function setConsoleProxies() {
+    if (!console.original) {
+      console.original = {};
+    }
+    overridableFunctionNames.forEach((funcName) => {
+      if (!console.original[funcName]) {
+        console.original[funcName] = console[funcName];
+      }
+      console[funcName] = createConsoleProxy(console[funcName], funcName);
+    });
+  }
+  function initializeConsoleErrorCapture() {
+    if (consoleErrorCaptureInitialized) return;
+    setConsoleProxies();
+    window.addEventListener("error", (event) => {
+      const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+      const errorDetails = event.error ? serializeArgument(event.error) : `${event.message}`;
+      addErrorToGlobalList(`[UNCAUGHT ERROR] ${timestamp}
+Message: ${errorDetails}
+File: ${event.filename}:${event.lineno}:${event.colno}
+Stack: ${event.error?.stack || "No stack trace available"}
+---`);
+    });
+    window.addEventListener("unhandledrejection", (event) => {
+      const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+      const reason = serializeArgument(event.reason);
+      addErrorToGlobalList(`[UNHANDLED PROMISE REJECTION] ${timestamp}
+Reason: ${reason}
+---`);
+    });
+    window.addEventListener("error", (event) => {
+      if (event.target !== window && event.target) {
+        const target = event.target;
+        const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+        const tagName = target.tagName?.toLowerCase();
+        const src = target.src || target.href;
+        addErrorToGlobalList(`[RESOURCE ERROR] ${timestamp}
+Failed to load ${tagName}: ${src}
+Element: ${target.outerHTML?.substring(0, 200)}...
+---`);
+      }
+    }, true);
+    const originalFetch = window.fetch;
+    window.fetch = async (...args) => {
+      try {
+        const response = await originalFetch.apply(window, args);
+        if (!response.ok) {
+          const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+          const url = typeof args[0] === "string" ? args[0] : args[0] instanceof Request ? args[0].url : args[0] instanceof URL ? args[0].href : String(args[0]);
+          addErrorToGlobalList(`[NETWORK ERROR] ${timestamp}
+Failed request: ${response.status} ${response.statusText}
+URL: ${url}
+---`);
+        }
+        return response;
+      } catch (error) {
+        const timestamp = (/* @__PURE__ */ new Date()).toISOString();
+        const url = typeof args[0] === "string" ? args[0] : args[0] instanceof Request ? args[0].url : args[0] instanceof URL ? args[0].href : String(args[0]);
+        addErrorToGlobalList(`[FETCH ERROR] ${timestamp}
+Request failed: ${serializeArgument(error)}
+URL: ${url}
+---`);
+        throw error;
+      }
+    };
+    consoleErrorCaptureInitialized = true;
+    console.log("\u{1F50D} Console error capture initialized successfully");
+  }
+  function captureConsoleErrors() {
+    const captured = [...globalConsoleErrors];
+    return captured;
+  }
+  function captureConsoleWarnings() {
+    const captured = [...globalConsoleWarnings];
+    return captured;
+  }
+  function captureConsoleInfo() {
+    const captured = [...globalConsoleInfo];
+    return captured;
+  }
+
+  // src/inspector/ai.ts
+  function createAIManager() {
+    let trpcClient = null;
+    let wsClient = null;
+    let currentSubscription = null;
+    let globalSessionId = null;
+    const clientId = Math.random().toString(36).substring(7);
+    initializeConsoleErrorCapture();
+    return {
+      initialize(aiEndpoint) {
+        if (!aiEndpoint) return;
+        if (wsClient) {
+          wsClient.close();
+        }
+        const wsUrl = aiEndpoint.replace("http://", "ws://").replace("https://", "wss://");
+        wsClient = createWSClient({
+          url: `${wsUrl}/trpc`
+        });
+        trpcClient = createTRPCClient({
+          links: [
+            splitLink({
+              condition(op) {
+                return op.type === "subscription";
+              },
+              true: wsLink({
+                client: wsClient,
+                transformer: SuperJSON
+              }),
+              false: httpBatchLink({
+                url: `${aiEndpoint}/trpc`,
+                transformer: SuperJSON
+              })
+            })
+          ]
+        });
+      },
+      async sendMessage(userPrompt, selectedElements, pageInfo, cwd, handler) {
+        if (!trpcClient) {
+          throw new Error("tRPC client not initialized");
+        }
+        if (currentSubscription) {
+          console.log(`\u{1F7E1} [CLIENT ${clientId}] Cancelling existing subscription before creating new one`);
+          currentSubscription.unsubscribe();
+          currentSubscription = null;
+        }
+        console.log(`\u{1F7E2} [CLIENT ${clientId}] Creating new subscription for prompt: "${userPrompt.substring(0, 30)}..."`);
+        let consoleErrors;
+        let consoleWarnings;
+        let consoleInfo;
+        if (userPrompt.includes("@error")) {
+          consoleErrors = captureConsoleErrors();
+        }
+        if (userPrompt.includes("@warning")) {
+          consoleWarnings = captureConsoleWarnings();
+        }
+        if (userPrompt.includes("@info")) {
+          consoleInfo = captureConsoleInfo();
+        }
+        const structuredInput = {
+          userPrompt,
+          selectedElements,
+          pageInfo,
+          cwd,
+          sessionId: globalSessionId || void 0,
+          consoleErrors,
+          consoleWarnings,
+          consoleInfo
+        };
+        console.log("structuredInput", structuredInput);
+        const subscription = trpcClient.sendMessage.subscribe(
+          structuredInput,
+          {
+            onData: (data) => {
+              console.log(`\u{1F4E5} [CLIENT ${clientId}] SSE data received:`, data);
+              if ((data.type === "claude_json" || data.type === "claude_response" || data.type === "complete") && data.sessionId) {
+                globalSessionId = data.sessionId;
+              }
+              handler.onData(data);
+              if (data.type === "complete") {
+                console.log(`\u2705 [CLIENT ${clientId}] AI request completed with session ID:`, data.sessionId);
+                currentSubscription = null;
+                handler.onComplete();
+              }
+            },
+            onError: (error) => {
+              console.error(`\u274C [CLIENT ${clientId}] Subscription error:`, error);
+              currentSubscription = null;
+              handler.onError(error);
+            }
+          }
+        );
+        currentSubscription = subscription;
+      },
+      async newChat() {
+        if (trpcClient) {
+          try {
+            await trpcClient.newChat.mutate();
+            globalSessionId = null;
+          } catch (error) {
+            console.error("Failed to start new chat:", error);
+            throw error;
+          }
+        } else {
+          console.warn("tRPC client not initialized");
+          throw new Error("tRPC client not initialized");
+        }
+      },
+      cancel() {
+        if (currentSubscription) {
+          console.log("Cancelling current AI request");
+          currentSubscription.unsubscribe();
+          currentSubscription = null;
+        }
+      },
+      getSessionId() {
+        return globalSessionId;
+      },
+      isInitialized() {
+        return trpcClient !== null;
+      },
+      isProcessing() {
+        return currentSubscription !== null;
+      },
+      destroy() {
+        if (currentSubscription) {
+          currentSubscription.unsubscribe();
+        }
+        if (wsClient) {
+          wsClient.close();
+        }
+      }
+    };
+  }
+
   // src/utils/xpath.ts
   var XPathUtils = class {
     static generateXPath(element) {
@@ -2650,247 +2936,24 @@
     }
   };
 
-  // src/inspector/managers.ts
-  var AIManager = class {
-    constructor() {
-      this.trpcClient = null;
-      this.wsClient = null;
-      this.currentSubscription = null;
-      this.globalSessionId = null;
-      this.clientId = Math.random().toString(36).substring(7);
-    }
-    initialize(aiEndpoint) {
-      if (!aiEndpoint) return;
-      if (this.wsClient) {
-        this.wsClient.close();
-      }
-      const wsUrl = aiEndpoint.replace("http://", "ws://").replace("https://", "wss://");
-      this.wsClient = createWSClient({
-        url: `${wsUrl}/trpc`
-      });
-      this.trpcClient = createTRPCClient({
-        links: [
-          splitLink({
-            condition(op) {
-              return op.type === "subscription";
-            },
-            true: wsLink({
-              client: this.wsClient,
-              transformer: SuperJSON
-            }),
-            false: httpBatchLink({
-              url: `${aiEndpoint}/trpc`,
-              transformer: SuperJSON
-            })
-          })
-        ]
-      });
-    }
-    async sendMessage(userPrompt, selectedElements, pageInfo, cwd, handler) {
-      if (!this.trpcClient) {
-        throw new Error("tRPC client not initialized");
-      }
-      if (this.currentSubscription) {
-        console.log(`\u{1F7E1} [CLIENT ${this.clientId}] Cancelling existing subscription before creating new one`);
-        this.currentSubscription.unsubscribe();
-        this.currentSubscription = null;
-      }
-      console.log(`\u{1F7E2} [CLIENT ${this.clientId}] Creating new subscription for prompt: "${userPrompt.substring(0, 30)}..."`);
-      const structuredInput = {
-        userPrompt,
-        selectedElements,
-        pageInfo,
-        cwd,
-        sessionId: this.globalSessionId || void 0
-      };
-      const subscription = this.trpcClient.sendMessage.subscribe(
-        structuredInput,
-        {
-          onData: (data) => {
-            console.log(`\u{1F4E5} [CLIENT ${this.clientId}] SSE data received:`, data);
-            if ((data.type === "claude_json" || data.type === "claude_response" || data.type === "complete") && data.sessionId) {
-              this.globalSessionId = data.sessionId;
-            }
-            handler.onData(data);
-            if (data.type === "complete") {
-              console.log(`\u2705 [CLIENT ${this.clientId}] AI request completed with session ID:`, data.sessionId);
-              this.currentSubscription = null;
-              handler.onComplete();
-            }
-          },
-          onError: (error) => {
-            console.error(`\u274C [CLIENT ${this.clientId}] Subscription error:`, error);
-            this.currentSubscription = null;
-            handler.onError(error);
-          }
-        }
-      );
-      this.currentSubscription = subscription;
-    }
-    async newChat() {
-      if (this.trpcClient) {
-        try {
-          await this.trpcClient.newChat.mutate();
-          this.globalSessionId = null;
-        } catch (error) {
-          console.error("Failed to start new chat:", error);
-          throw error;
-        }
-      } else {
-        console.warn("tRPC client not initialized");
-        throw new Error("tRPC client not initialized");
-      }
-    }
-    cancel() {
-      if (this.currentSubscription) {
-        console.log("Cancelling current AI request");
-        this.currentSubscription.unsubscribe();
-        this.currentSubscription = null;
-      }
-    }
-    getSessionId() {
-      return this.globalSessionId;
-    }
-    isInitialized() {
-      return this.trpcClient !== null;
-    }
-    isProcessing() {
-      return this.currentSubscription !== null;
-    }
-    destroy() {
-      if (this.currentSubscription) {
-        this.currentSubscription.unsubscribe();
-      }
-      if (this.wsClient) {
-        this.wsClient.close();
-      }
-    }
-  };
-  var ElementSelectionManager = class {
-    constructor() {
-      this.selectedElements = /* @__PURE__ */ new Map();
-      this.badges = /* @__PURE__ */ new Map();
-      this.colorIndex = 0;
-      this.colors = [
-        "#FF6B6B",
-        "#FF9671",
-        "#FFA75F",
-        "#F9D423",
-        "#FECA57",
-        "#FF9FF3",
-        "#FF7E67",
-        "#FF8C42",
-        "#FFC857",
-        "#FFA26B"
-      ];
-    }
-    selectElement(element, componentFinder) {
-      const color = this.colors[this.colorIndex % this.colors.length];
-      const index = this.selectedElements.size + 1;
-      this.colorIndex++;
-      element.style.outline = `3px solid ${color}`;
-      element.style.outlineOffset = "-1px";
-      const badge = this.createBadge(index, color, element, componentFinder);
-      this.badges.set(element, badge);
-      this.selectedElements.set(element, {
-        color,
-        originalOutline: element.style.outline,
-        originalOutlineOffset: element.style.outlineOffset,
-        index
-      });
-    }
-    deselectElement(element) {
-      const elementData = this.selectedElements.get(element);
-      if (elementData) {
-        ;
-        element.style.outline = "";
-        element.style.outlineOffset = "";
-        const badge = this.badges.get(element);
-        if (badge) {
-          badge.remove();
-          this.badges.delete(element);
-        }
-        this.selectedElements.delete(element);
-        this.reindexElements();
-      }
-    }
-    clearAllSelections() {
-      this.selectedElements.forEach((_, element) => {
-        ;
-        element.style.outline = "";
-        element.style.outlineOffset = "";
-      });
-      this.badges.forEach((badge) => badge.remove());
-      this.badges.clear();
-      this.selectedElements.clear();
-      this.colorIndex = 0;
-    }
-    hasElement(element) {
-      return this.selectedElements.has(element);
-    }
-    getSelectedElements() {
-      return this.selectedElements;
-    }
-    getSelectedCount() {
-      return this.selectedElements.size;
-    }
-    findSelectedParent(element) {
-      let currentElement = element.parentElement;
-      while (currentElement && currentElement !== document.body) {
-        if (this.selectedElements.has(currentElement)) {
-          return currentElement;
-        }
-        currentElement = currentElement.parentElement;
-      }
-      return null;
-    }
-    findSelectedChildren(element) {
-      const children = [];
-      this.selectedElements.forEach((_, selectedElement) => {
-        if (element.contains(selectedElement) && selectedElement !== element) {
-          children.push(selectedElement);
-        }
-      });
-      return children;
-    }
-    buildHierarchicalStructure(componentFinder) {
-      const rootElements = [];
-      this.selectedElements.forEach((_, element) => {
-        if (!this.findSelectedParent(element)) {
-          rootElements.push(element);
-        }
-      });
-      const buildElementInfo = (element) => {
-        const data = this.selectedElements.get(element);
-        const children = this.findSelectedChildren(element);
-        const componentData = componentFinder?.(element);
-        const elementInfo = {
-          index: data.index,
-          tagName: element.tagName,
-          xpath: XPathUtils.generateXPath(element),
-          textContent: element.textContent?.substring(0, 100) || "",
-          attributes: Array.from(element.attributes).reduce((acc, attr) => {
-            if (attr.name !== "style") {
-              acc[attr.name] = attr.value;
-            }
-            return acc;
-          }, {}),
-          children: []
-        };
-        if (componentData) {
-          elementInfo.componentData = componentData;
-        }
-        const directChildren = children.filter(
-          (child) => this.findSelectedParent(child) === element
-        );
-        directChildren.forEach((child) => {
-          elementInfo.children.push(buildElementInfo(child));
-        });
-        return elementInfo;
-      };
-      return rootElements.map((element) => buildElementInfo(element));
-    }
-    createBadge(index, color, element, componentFinder) {
+  // src/inspector/selection.ts
+  function createElementSelectionManager() {
+    const selectedElements = /* @__PURE__ */ new Map();
+    const badges = /* @__PURE__ */ new Map();
+    let colorIndex = 0;
+    const colors = [
+      "#FF6B6B",
+      "#FF9671",
+      "#FFA75F",
+      "#F9D423",
+      "#FECA57",
+      "#FF9FF3",
+      "#FF7E67",
+      "#FF8C42",
+      "#FFC857",
+      "#FFA26B"
+    ];
+    function createBadge(index, color, element, componentFinder) {
       const badge = document.createElement("div");
       badge.classList.add("inspector-badge");
       const shadow = badge.attachShadow({ mode: "open" });
@@ -2945,11 +3008,11 @@
       };
       return badge;
     }
-    reindexElements() {
+    function reindexElements() {
       let index = 1;
-      this.selectedElements.forEach((data, element) => {
+      selectedElements.forEach((data, element) => {
         data.index = index;
-        const badge = this.badges.get(element);
+        const badge = badges.get(element);
         if (badge) {
           const badgeContent = badge.shadowRoot?.querySelector(".badge");
           if (badgeContent) {
@@ -2959,297 +3022,412 @@
         index++;
       });
     }
-  };
-  var InspectionManager = class {
-    constructor(onElementSelect, shouldIgnoreElement, isElementSelected) {
-      this.isInspecting = false;
-      this.currentHoveredElement = null;
-      this.inspectionStyleElement = null;
-      this.onElementSelect = onElementSelect;
-      this.shouldIgnoreElement = shouldIgnoreElement;
-      this.isElementSelected = isElementSelected;
-      this.handleMouseOver = this.handleMouseOver.bind(this);
-      this.handleMouseOut = this.handleMouseOut.bind(this);
-      this.handleElementClick = this.handleElementClick.bind(this);
-      this.preventMouseEvents = this.preventMouseEvents.bind(this);
+    function findSelectedParent(element) {
+      let currentElement = element.parentElement;
+      while (currentElement && currentElement !== document.body) {
+        if (selectedElements.has(currentElement)) {
+          return currentElement;
+        }
+        currentElement = currentElement.parentElement;
+      }
+      return null;
     }
-    enterInspectionMode() {
-      if (this.isInspecting) return;
-      this.isInspecting = true;
-      this.addInspectionStyles();
-      document.addEventListener("mouseover", this.handleMouseOver, true);
-      document.addEventListener("mouseout", this.handleMouseOut, true);
-      document.addEventListener("click", this.handleElementClick, true);
-      document.addEventListener("mousedown", this.preventMouseEvents, true);
-      document.addEventListener("mouseup", this.preventMouseEvents, true);
-      document.addEventListener("dblclick", this.preventMouseEvents, true);
-      document.addEventListener("contextmenu", this.preventMouseEvents, true);
+    function findSelectedChildren(element) {
+      const children = [];
+      selectedElements.forEach((_, selectedElement) => {
+        if (element.contains(selectedElement) && selectedElement !== element) {
+          children.push(selectedElement);
+        }
+      });
+      return children;
     }
-    exitInspectionMode() {
-      if (!this.isInspecting) return;
-      this.isInspecting = false;
-      this.removeInspectionStyles();
-      document.removeEventListener("mouseover", this.handleMouseOver, true);
-      document.removeEventListener("mouseout", this.handleMouseOut, true);
-      document.removeEventListener("click", this.handleElementClick, true);
-      document.removeEventListener("mousedown", this.preventMouseEvents, true);
-      document.removeEventListener("mouseup", this.preventMouseEvents, true);
-      document.removeEventListener("dblclick", this.preventMouseEvents, true);
-      document.removeEventListener("contextmenu", this.preventMouseEvents, true);
-      this.removeHoverHighlight();
-    }
-    isInInspectionMode() {
-      return this.isInspecting;
-    }
-    addInspectionStyles() {
-      this.inspectionStyleElement = document.createElement("style");
-      this.inspectionStyleElement.id = "inspector-toolbar-styles";
-      this.inspectionStyleElement.textContent = `
+    return {
+      selectElement(element, componentFinder) {
+        const color = colors[colorIndex % colors.length];
+        const index = selectedElements.size + 1;
+        colorIndex++;
+        element.style.outline = `3px solid ${color}`;
+        element.style.outlineOffset = "-1px";
+        const badge = createBadge(index, color, element, componentFinder);
+        badges.set(element, badge);
+        selectedElements.set(element, {
+          color,
+          originalOutline: element.style.outline,
+          originalOutlineOffset: element.style.outlineOffset,
+          index
+        });
+      },
+      deselectElement(element) {
+        const elementData = selectedElements.get(element);
+        if (elementData) {
+          ;
+          element.style.outline = "";
+          element.style.outlineOffset = "";
+          const badge = badges.get(element);
+          if (badge) {
+            badge.remove();
+            badges.delete(element);
+          }
+          selectedElements.delete(element);
+          reindexElements();
+        }
+      },
+      clearAllSelections() {
+        selectedElements.forEach((_, element) => {
+          ;
+          element.style.outline = "";
+          element.style.outlineOffset = "";
+        });
+        badges.forEach((badge) => badge.remove());
+        badges.clear();
+        selectedElements.clear();
+        colorIndex = 0;
+      },
+      hasElement(element) {
+        return selectedElements.has(element);
+      },
+      getSelectedElements() {
+        return selectedElements;
+      },
+      getSelectedCount() {
+        return selectedElements.size;
+      },
+      findSelectedParent,
+      findSelectedChildren,
+      buildHierarchicalStructure(componentFinder) {
+        const rootElements = [];
+        selectedElements.forEach((_, element) => {
+          if (!findSelectedParent(element)) {
+            rootElements.push(element);
+          }
+        });
+        const buildElementInfo = (element) => {
+          const data = selectedElements.get(element);
+          const children = findSelectedChildren(element);
+          const componentData = componentFinder?.(element);
+          const elementInfo = {
+            index: data.index,
+            tagName: element.tagName,
+            xpath: XPathUtils.generateXPath(element),
+            textContent: element.textContent?.substring(0, 100) || "",
+            attributes: Array.from(element.attributes).reduce((acc, attr) => {
+              if (attr.name !== "style") {
+                acc[attr.name] = attr.value;
+              }
+              return acc;
+            }, {}),
+            children: []
+          };
+          if (componentData) {
+            elementInfo.componentData = componentData;
+          }
+          const directChildren = children.filter(
+            (child) => findSelectedParent(child) === element
+          );
+          directChildren.forEach((child) => {
+            elementInfo.children.push(buildElementInfo(child));
+          });
+          return elementInfo;
+        };
+        return rootElements.map((element) => buildElementInfo(element));
+      }
+    };
+  }
+
+  // src/inspector/inspection.ts
+  function createInspectionManager(onElementSelect, shouldIgnoreElement, isElementSelected) {
+    let isInspecting = false;
+    let currentHoveredElement = null;
+    let inspectionStyleElement = null;
+    function addInspectionStyles() {
+      inspectionStyleElement = document.createElement("style");
+      inspectionStyleElement.id = "inspector-toolbar-styles";
+      inspectionStyleElement.textContent = `
       * {
         cursor: crosshair !important;
       }
     `;
-      document.head.appendChild(this.inspectionStyleElement);
+      document.head.appendChild(inspectionStyleElement);
     }
-    removeInspectionStyles() {
-      if (this.inspectionStyleElement) {
-        this.inspectionStyleElement.remove();
-        this.inspectionStyleElement = null;
+    function removeInspectionStyles() {
+      if (inspectionStyleElement) {
+        inspectionStyleElement.remove();
+        inspectionStyleElement = null;
       }
     }
-    handleMouseOver(e) {
+    function removeHoverHighlight() {
+      if (currentHoveredElement) {
+        if (!isElementSelected?.(currentHoveredElement)) {
+          ;
+          currentHoveredElement.style.outline = "";
+          currentHoveredElement.style.outlineOffset = "";
+        }
+        currentHoveredElement = null;
+      }
+    }
+    function handleMouseOver(e) {
       const target = e.target;
-      if (this.shouldIgnoreElement?.(target)) return;
-      this.removeHoverHighlight();
+      if (shouldIgnoreElement?.(target)) return;
+      removeHoverHighlight();
       target.style.outline = "3px solid #3B82F6";
       target.style.outlineOffset = "-1px";
-      this.currentHoveredElement = target;
+      currentHoveredElement = target;
     }
-    handleMouseOut(e) {
+    function handleMouseOut(e) {
       const target = e.target;
-      if (this.shouldIgnoreElement?.(target)) return;
-      if (!this.isElementSelected?.(target)) {
+      if (shouldIgnoreElement?.(target)) return;
+      if (!isElementSelected?.(target)) {
         ;
         target.style.outline = "";
         target.style.outlineOffset = "";
       }
     }
-    handleElementClick(e) {
+    function handleElementClick(e) {
       const target = e.target;
-      if (this.shouldIgnoreElement?.(target)) return;
+      if (shouldIgnoreElement?.(target)) return;
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
-      this.onElementSelect?.(target);
+      onElementSelect?.(target);
     }
-    preventMouseEvents(e) {
+    function preventMouseEvents(e) {
       const target = e.target;
-      if (this.shouldIgnoreElement?.(target)) return;
+      if (shouldIgnoreElement?.(target)) return;
       e.preventDefault();
       e.stopPropagation();
       e.stopImmediatePropagation();
     }
-    removeHoverHighlight() {
-      if (this.currentHoveredElement) {
-        if (!this.isElementSelected?.(this.currentHoveredElement)) {
-          ;
-          this.currentHoveredElement.style.outline = "";
-          this.currentHoveredElement.style.outlineOffset = "";
+    return {
+      enterInspectionMode() {
+        if (isInspecting) return;
+        isInspecting = true;
+        addInspectionStyles();
+        document.addEventListener("mouseover", handleMouseOver, true);
+        document.addEventListener("mouseout", handleMouseOut, true);
+        document.addEventListener("click", handleElementClick, true);
+        document.addEventListener("mousedown", preventMouseEvents, true);
+        document.addEventListener("mouseup", preventMouseEvents, true);
+        document.addEventListener("dblclick", preventMouseEvents, true);
+        document.addEventListener("contextmenu", preventMouseEvents, true);
+      },
+      exitInspectionMode() {
+        if (!isInspecting) return;
+        isInspecting = false;
+        removeInspectionStyles();
+        document.removeEventListener("mouseover", handleMouseOver, true);
+        document.removeEventListener("mouseout", handleMouseOut, true);
+        document.removeEventListener("click", handleElementClick, true);
+        document.removeEventListener("mousedown", preventMouseEvents, true);
+        document.removeEventListener("mouseup", preventMouseEvents, true);
+        document.removeEventListener("dblclick", preventMouseEvents, true);
+        document.removeEventListener("contextmenu", preventMouseEvents, true);
+        removeHoverHighlight();
+      },
+      isInInspectionMode() {
+        return isInspecting;
+      },
+      destroy() {
+        if (isInspecting) {
+          isInspecting = false;
+          removeInspectionStyles();
+          document.removeEventListener("mouseover", handleMouseOver, true);
+          document.removeEventListener("mouseout", handleMouseOut, true);
+          document.removeEventListener("click", handleElementClick, true);
+          document.removeEventListener("mousedown", preventMouseEvents, true);
+          document.removeEventListener("mouseup", preventMouseEvents, true);
+          document.removeEventListener("dblclick", preventMouseEvents, true);
+          document.removeEventListener("contextmenu", preventMouseEvents, true);
+          removeHoverHighlight();
         }
-        this.currentHoveredElement = null;
       }
+    };
+  }
+
+  // src/inspector/state.ts
+  function createToolbarStateManager(eventEmitter) {
+    const state = {
+      isExpanded: false,
+      isInspecting: false,
+      isProcessing: false,
+      sessionId: null,
+      selectedElements: [],
+      messages: []
+    };
+    const cleanupFunctions = [];
+    function onStateChange() {
     }
-    destroy() {
-      this.exitInspectionMode();
-    }
-  };
-  var ToolbarStateManager = class {
-    constructor(eventEmitter) {
-      this.cleanupFunctions = [];
-      this.events = eventEmitter;
-      this.state = {
-        isExpanded: false,
-        isInspecting: false,
-        isProcessing: false,
-        sessionId: null,
-        selectedElements: [],
-        messages: []
-      };
-      this.setupEventListeners();
-    }
-    setupEventListeners() {
-      this.cleanupFunctions.push(
-        this.events.on("ui:expand", () => {
-          this.state.isExpanded = true;
-          this.onStateChange();
+    function setupEventListeners() {
+      cleanupFunctions.push(
+        eventEmitter.on("ui:expand", () => {
+          state.isExpanded = true;
+          onStateChange();
         }),
-        this.events.on("ui:collapse", () => {
-          this.state.isExpanded = false;
-          this.state.isInspecting = false;
-          this.onStateChange();
+        eventEmitter.on("ui:collapse", () => {
+          state.isExpanded = false;
+          state.isInspecting = false;
+          onStateChange();
         }),
-        this.events.on("ui:enter-inspection", () => {
-          this.state.isInspecting = true;
-          this.onStateChange();
+        eventEmitter.on("ui:enter-inspection", () => {
+          state.isInspecting = true;
+          onStateChange();
         }),
-        this.events.on("ui:exit-inspection", () => {
-          this.state.isInspecting = false;
-          this.onStateChange();
+        eventEmitter.on("ui:exit-inspection", () => {
+          state.isInspecting = false;
+          onStateChange();
         }),
-        this.events.on("ui:processing-start", () => {
-          this.state.isProcessing = true;
-          this.state.isInspecting = false;
-          this.onStateChange();
+        eventEmitter.on("ui:processing-start", () => {
+          state.isProcessing = true;
+          state.isInspecting = false;
+          onStateChange();
         }),
-        this.events.on("ui:processing-end", () => {
-          this.state.isProcessing = false;
-          this.onStateChange();
+        eventEmitter.on("ui:processing-end", () => {
+          state.isProcessing = false;
+          onStateChange();
         })
       );
-      this.cleanupFunctions.push(
-        this.events.on("selection:changed", (elements) => {
-          this.state.selectedElements = elements;
-          this.onStateChange();
+      cleanupFunctions.push(
+        eventEmitter.on("selection:changed", (elements) => {
+          state.selectedElements = elements;
+          onStateChange();
         }),
-        this.events.on("selection:clear", () => {
-          this.state.selectedElements = [];
-          this.onStateChange();
+        eventEmitter.on("selection:clear", () => {
+          state.selectedElements = [];
+          onStateChange();
         })
       );
-      this.cleanupFunctions.push(
-        this.events.on("session:updated", ({ sessionId }) => {
-          this.state.sessionId = sessionId;
-          this.onStateChange();
+      cleanupFunctions.push(
+        eventEmitter.on("session:updated", ({ sessionId }) => {
+          state.sessionId = sessionId;
+          onStateChange();
         }),
-        this.events.on("session:new", () => {
-          this.state.sessionId = null;
-          this.state.selectedElements = [];
-          this.state.messages = [];
-          this.onStateChange();
+        eventEmitter.on("session:new", () => {
+          state.sessionId = null;
+          state.selectedElements = [];
+          state.messages = [];
+          onStateChange();
         })
       );
-      this.cleanupFunctions.push(
-        this.events.on("messages:add", (message) => {
-          this.state.messages.push(message);
+      cleanupFunctions.push(
+        eventEmitter.on("messages:add", (message) => {
+          state.messages.push(message);
           if ((message.type === "claude_json" || message.type === "claude_response" || message.type === "complete") && message.sessionId) {
-            this.state.sessionId = message.sessionId;
+            state.sessionId = message.sessionId;
           }
           if (message.type === "complete") {
-            this.state.isProcessing = false;
+            state.isProcessing = false;
           }
-          this.onStateChange();
+          onStateChange();
         }),
-        this.events.on("messages:clear", () => {
-          this.state.messages = [];
-          this.onStateChange();
+        eventEmitter.on("messages:clear", () => {
+          state.messages = [];
+          onStateChange();
         })
       );
-      this.cleanupFunctions.push(
-        this.events.on("prompt:clear", () => {
-          this.onStateChange();
+      cleanupFunctions.push(
+        eventEmitter.on("prompt:clear", () => {
+          onStateChange();
         })
       );
     }
-    onStateChange() {
-    }
-    getState() {
-      return { ...this.state };
-    }
-    isExpanded() {
-      return this.state.isExpanded;
-    }
-    isInspecting() {
-      return this.state.isInspecting;
-    }
-    isProcessing() {
-      return this.state.isProcessing;
-    }
-    getSessionId() {
-      return this.state.sessionId;
-    }
-    getSelectedElements() {
-      return [...this.state.selectedElements];
-    }
-    getMessages() {
-      return [...this.state.messages];
-    }
-    destroy() {
-      this.cleanupFunctions.forEach((cleanup) => cleanup());
-      this.cleanupFunctions = [];
-    }
-  };
+    setupEventListeners();
+    return {
+      getState() {
+        return { ...state };
+      },
+      isExpanded() {
+        return state.isExpanded;
+      },
+      isInspecting() {
+        return state.isInspecting;
+      },
+      isProcessing() {
+        return state.isProcessing;
+      },
+      getSessionId() {
+        return state.sessionId;
+      },
+      getSelectedElements() {
+        return [...state.selectedElements];
+      },
+      getMessages() {
+        return [...state.messages];
+      },
+      destroy() {
+        cleanupFunctions.forEach((cleanup) => cleanup());
+        cleanupFunctions.length = 0;
+      }
+    };
+  }
 
   // src/inspector/detectors.ts
-  var ComponentDetector = class _ComponentDetector {
-    static findNearestComponent(element) {
-      if (!element || element === document.body) return null;
-      try {
-        let componentInfo = _ComponentDetector.getVueComponentInfo(element);
+  function findNearestComponent(element) {
+    if (!element || element === document.body) return null;
+    try {
+      let componentInfo = getVueComponentInfo(element);
+      if (componentInfo) {
+        console.log("\u{1F7E2} Vue component found:", componentInfo);
+      } else {
+        console.log("\u{1F50D} No Vue component found for element:", element.tagName, "Checking properties:", {
+          __vnode: !!element.__vnode,
+          __vueParentComponent: !!element.__vueParentComponent,
+          __vue__: !!element.__vue__,
+          __v_inspector: !!element.__v_inspector
+        });
+      }
+      if (!componentInfo) {
+        componentInfo = getVanillaComponentInfo(element);
         if (componentInfo) {
-          console.log("\u{1F7E2} Vue component found:", componentInfo);
-        } else {
-          console.log("\u{1F50D} No Vue component found for element:", element.tagName, "Checking properties:", {
-            __vnode: !!element.__vnode,
-            __vueParentComponent: !!element.__vueParentComponent,
-            __vue__: !!element.__vue__,
-            __v_inspector: !!element.__v_inspector
-          });
+          console.log("\u{1F7E1} Vanilla component found:", componentInfo);
         }
-        if (!componentInfo) {
-          componentInfo = _ComponentDetector.getVanillaComponentInfo(element);
-          if (componentInfo) {
-            console.log("\u{1F7E1} Vanilla component found:", componentInfo);
-          }
-        }
-        if (componentInfo) {
-          return componentInfo;
-        }
-        return _ComponentDetector.findNearestComponent(element.parentElement);
-      } catch (e) {
-        console.error("Error finding nearest component:", e);
-        return null;
+      }
+      if (componentInfo) {
+        return componentInfo;
+      }
+      return findNearestComponent(element.parentElement);
+    } catch (e) {
+      console.error("Error finding nearest component:", e);
+      return null;
+    }
+  }
+  function getVanillaComponentInfo(element) {
+    const componentName = element.getAttribute("data-component-name");
+    const componentFile = element.getAttribute("data-component-file");
+    if (!componentName && !componentFile) {
+      return null;
+    }
+    return {
+      componentLocation: `${componentFile}@${componentName}`
+    };
+  }
+  function getVueComponentInfo(element) {
+    if (!element) return null;
+    const elementAny = element;
+    let codeLocation = elementAny.__vnode?.props?.__v_inspector;
+    if (!codeLocation) {
+      codeLocation = elementAny.__vueParentComponent?.vnode?.props?.__v_inspector;
+    }
+    if (!codeLocation) {
+      codeLocation = elementAny.__v_inspector;
+    }
+    if (!codeLocation) {
+      const vueInstance = elementAny.__vue__ || elementAny.__vueParentComponent;
+      if (vueInstance) {
+        codeLocation = vueInstance.__v_inspector || vueInstance.$options?.__v_inspector || vueInstance.type?.__v_inspector;
       }
     }
-    static getVanillaComponentInfo(element) {
-      const componentName = element.getAttribute("data-component-name");
-      const componentFile = element.getAttribute("data-component-file");
-      if (!componentName && !componentFile) {
-        return null;
+    if (!codeLocation) {
+      const vnode = elementAny.__vnode || elementAny.$vnode;
+      if (vnode) {
+        codeLocation = vnode.__v_inspector || vnode.props?.__v_inspector || vnode.componentOptions?.__v_inspector;
       }
-      return {
-        componentLocation: `${componentFile}@${componentName}`
-      };
     }
-    static getVueComponentInfo(element) {
-      if (!element) return null;
-      const elementAny = element;
-      let codeLocation = elementAny.__vnode?.props?.__v_inspector;
-      if (!codeLocation) {
-        codeLocation = elementAny.__vueParentComponent?.vnode?.props?.__v_inspector;
-      }
-      if (!codeLocation) {
-        codeLocation = elementAny.__v_inspector;
-      }
-      if (!codeLocation) {
-        const vueInstance = elementAny.__vue__ || elementAny.__vueParentComponent;
-        if (vueInstance) {
-          codeLocation = vueInstance.__v_inspector || vueInstance.$options?.__v_inspector || vueInstance.type?.__v_inspector;
-        }
-      }
-      if (!codeLocation) {
-        const vnode = elementAny.__vnode || elementAny.$vnode;
-        if (vnode) {
-          codeLocation = vnode.__v_inspector || vnode.props?.__v_inspector || vnode.componentOptions?.__v_inspector;
-        }
-      }
-      if (!codeLocation) {
-        return null;
-      }
-      return {
-        componentLocation: codeLocation
-      };
+    if (!codeLocation) {
+      return null;
     }
-  };
+    return {
+      componentLocation: codeLocation
+    };
+  }
 
   // src/utils/html.ts
   var HtmlUtils = class {
@@ -3270,6 +3448,18 @@
   };
 
   // src/inspector/ui.ts
+  var CONFIG = {
+    MAX_CONTENT_LENGTH: 1e4,
+    MAX_RESULT_LENGTH: 1e4,
+    MAX_INPUT_DISPLAY: 1e4,
+    MESSAGE_HISTORY_LIMIT: 10,
+    ANIMATION_DURATIONS: {
+      GRADIENT_SHIFT: "7.3s",
+      GLOWING_AURA: "9.7s",
+      ROTATE_MIST: "13.5s",
+      BLINK_EYE: "5s"
+    }
+  };
   var TOOLBAR_STYLES = `
   :host {
     position: fixed;
@@ -3311,6 +3501,28 @@
     100% { box-shadow: 0 0 10px 5px rgba(255, 107, 107, 0.4), 0 0 20px 10px rgba(255, 150, 113, 0.2), 0 0 0 2px rgba(255, 255, 255, 0.1); }
   }
 
+  @keyframes rotateMist {
+    0% { transform: rotate(0deg) scale(1); }
+    17% { transform: rotate(83deg) scale(1.15) translateX(3px); }
+    31% { transform: rotate(127deg) scale(0.95) translateY(-4px); }
+    48% { transform: rotate(195deg) scale(1.12) translateX(-2px) translateY(3px); }
+    63% { transform: rotate(246deg) scale(1.05) translateY(5px); }
+    79% { transform: rotate(301deg) scale(0.97) translateX(4px) translateY(-2px); }
+    91% { transform: rotate(342deg) scale(1.08) translateY(-3px); }
+    100% { transform: rotate(360deg) scale(1); }
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 0.8; }
+    50% { opacity: 1; }
+  }
+
+  @keyframes dots {
+    0%, 20% { content: ''; }
+    40% { content: '.'; }
+    60% { content: '..'; }
+    80%, 100% { content: '...'; }
+  }
   .toolbar-button {
     width: 50px;
     height: 50px;
@@ -3606,6 +3818,7 @@
     border-radius: 6px;
     background: white;
     max-height: 400px;
+    width: 380px;
     display: none;
   }
 
@@ -3646,7 +3859,7 @@
 
   .json-content {
     max-height: 350px;
-    overflow-y: auto;
+    overflow: auto;
     padding: 4px;
   }
 
@@ -3764,9 +3977,53 @@
     margin-bottom: 0;
   }
 
+  .json-message .tool-combined {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 4px;
+    padding: 6px 8px;
+    margin: 2px 0;
+    font-family: 'Courier New', monospace;
+    font-size: 10px;
+    line-height: 1.3;
+  }
+
+  .json-message .tool-section {
+    margin: 3px 0;
+    padding: 2px 0;
+  }
+
+  .json-message .tool-section:not(:last-child) {
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 4px;
+  }
+
+  .json-message[data-tool-call-id] {
+    position: relative;
+    transition: all 0.3s ease;
+  }
+
+  .json-message[data-tool-call-id] .message-badge {
+    transition: all 0.3s ease;
+  }
+
+  .json-message[data-tool-call-id]:has(.message-content:contains("Running")) .message-badge {
+    background: #f59e0b;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes toolPulse {
+    0%, 100% { opacity: 0.8; }
+    50% { opacity: 1; }
+  }
+
   .toolbar-card.processing .toolbar-input,
   .toolbar-card.processing .toolbar-actions {
     display: none;
+  }
+
+  .toolbar-card.processing .new-chat-button {
+    display: none !important;
   }
 
   .processing-indicator {
@@ -3799,68 +4056,61 @@
     80%, 100% { content: '...'; }
   }
 `;
-  var UIRenderer = class {
-    static renderToolbar() {
-      return `
-      <style>
-        ${TOOLBAR_STYLES}
-      </style>
+  function renderToolbar() {
+    return `
+    <style>
+${TOOLBAR_STYLES}
+    </style>
 
-      <div class="toolbar-button" id="toggleButton">
-        <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
-          <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
-          <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
-        </svg>
-      </div>
+    <div class="toolbar-button" id="toggleButton">
+      <svg class="icon" fill="currentColor" viewBox="0 0 20 20">
+        <path d="M10 12a2 2 0 100-4 2 2 0 000 4z"/>
+        <path fill-rule="evenodd" d="M.458 10C1.732 5.943 5.522 3 10 3s8.268 2.943 9.542 7c-1.274 4.057-5.064 7-9.542 7S1.732 14.057.458 10zM14 10a4 4 0 11-8 0 4 4 0 018 0z" clip-rule="evenodd"/>
+      </svg>
+    </div>
 
-      <div class="toolbar-card" id="toolbarCard">
-        <div class="toolbar-header">
-          <div class="session-info" id="sessionInfo">
-            <span class="session-label">Session:</span>
-            <span class="session-id" id="sessionId">-</span>
-            <button class="action-button cancel-button" id="cancelButton">
-              <span>Cancel</span>
-            </button>
-            <button class="action-button new-chat-button" id="newChatButton">
-              <span>New Chat</span>
-            </button>
-          </div>
-          <textarea rows="2" autocomplete="off" type="text" class="toolbar-input" id="promptInput" placeholder="Type your prompt then press Enter"></textarea>
-        </div>
-        
-        <div class="toolbar-actions">
-          <button class="action-button inspect-button" id="inspectButton">
-            <span>Inspect</span>
-          </button>
-          <button class="action-button clear-button" id="clearElementButton">
-            <span>Clear</span>
-          </button>
-          <button class="action-button close-button" id="closeInspectButton">
+    <div class="toolbar-card" id="toolbarCard">
+      <div class="toolbar-header">
+        <div class="session-info" id="sessionInfo">
+          <span class="session-label">Session:</span>
+          <span class="session-id" id="sessionId">-</span>
+          <button class="action-button cancel-button" id="cancelButton">
             <span>Cancel</span>
           </button>
+          <button class="action-button new-chat-button" id="newChatButton">
+            <span>New Chat</span>
+          </button>
         </div>
-        
-        <div class="processing-indicator" id="processingIndicator">
-          <div>\u{1F504} Processing with Claude<span class="processing-dots"></span></div>
-        </div>
-        
-        <div class="json-display" id="jsonDisplay">
-          <div class="json-header">
-            <span>Claude Code Messages</span>
-            <button class="json-clear-button" id="jsonClearButton">Clear</button>
-          </div>
-          <div class="json-content" id="jsonContent"></div>
-        </div>
+        <textarea rows="2" autocomplete="off" type="text" class="toolbar-input" id="promptInput" placeholder="Type your prompt then press Enter"></textarea>
       </div>
-    `;
-    }
-  };
-  var MessageFormatter = class {
-    constructor() {
-      this.lastMessageHash = "";
-      this.messageHistory = /* @__PURE__ */ new Set();
-    }
-    formatPrompt(userPrompt, selectedElements, pageInfo) {
+
+      <div class="toolbar-actions">
+        <button class="action-button inspect-button" id="inspectButton">
+          <span>Inspect</span>
+        </button>
+        <button class="action-button clear-button" id="clearElementButton">
+          <span>Clear</span>
+        </button>
+        <button class="action-button close-button" id="closeInspectButton">
+          <span>Cancel</span>
+        </button>
+      </div>
+
+      <div class="processing-indicator" id="processingIndicator">
+        <div>\u{1F504} Processing with Claude<span class="processing-dots"></span></div>
+      </div>
+
+      <div class="json-display" id="jsonDisplay">
+        <div class="json-content" id="jsonContent"></div>
+      </div>
+    </div>
+  `;
+  }
+  function createMessageFormatter() {
+    let lastMessageHash = "";
+    let messageHistory = /* @__PURE__ */ new Set();
+    let pendingToolCalls = /* @__PURE__ */ new Map();
+    function formatPrompt(userPrompt, selectedElements, pageInfo) {
       let formattedPrompt = `<userRequest>${userPrompt}</userRequest>`;
       const replacer = (_key, value) => {
         if (value === "" || Array.isArray(value) && value.length === 0 || value === null) {
@@ -3876,69 +4126,180 @@
       }
       return formattedPrompt;
     }
-    shouldDisplayMessage(jsonData) {
-      const messageHash = this.hashMessage(jsonData);
-      if (messageHash === this.lastMessageHash) {
-        return false;
-      }
-      if (jsonData.type === "assistant" && this.messageHistory.has(messageHash)) {
-        return false;
-      }
-      this.lastMessageHash = messageHash;
+    function shouldShowMessage(jsonData) {
+      const messageHash = hashMessage(jsonData);
+      if (!messageHash) return true;
+      if (messageHash === lastMessageHash) return false;
+      if (jsonData.type === "assistant" && messageHistory.has(messageHash)) return false;
+      lastMessageHash = messageHash;
       if (jsonData.type === "assistant") {
-        this.messageHistory.add(messageHash);
-        if (this.messageHistory.size > 10) {
-          const firstHash = this.messageHistory.values().next().value;
-          if (firstHash) {
-            this.messageHistory.delete(firstHash);
-          }
+        messageHistory.add(messageHash);
+        if (messageHistory.size > CONFIG.MESSAGE_HISTORY_LIMIT) {
+          const firstHash = messageHistory.values().next().value;
+          if (firstHash) messageHistory.delete(firstHash);
         }
       }
       return true;
     }
-    formatClaudeMessage(data) {
+    function createMessage(data) {
       try {
-        let content = "";
-        let meta = "";
-        let badge = "";
-        if (data.type === "assistant" && data.message?.content) {
-          const extracted = this.extractAssistantContent(data.message.content);
-          content = extracted.text;
-          badge = extracted.badge || "";
-          if (data.message?.usage) {
-            const usage = data.message.usage;
-            meta = `${usage.input_tokens || 0}\u2191 ${usage.output_tokens || 0}\u2193`;
-          }
-        } else if (data.type === "user" && data.message?.content) {
-          const extracted = this.extractUserContent(data.message.content);
-          content = extracted.text;
-          badge = extracted.badge || "";
+        if (data.type === "assistant") {
+          return createAssistantMessage(data);
+        } else if (data.type === "user") {
+          return createUserMessage(data);
         } else if (data.type === "system") {
-          content = `System: ${data.subtype || "message"}`;
-          badge = "\u2699\uFE0F System";
-          if (data.cwd) meta = `${data.cwd}`;
+          return createSystemMessage(data);
         } else if (data.type === "result") {
-          content = data.result || "Task completed";
-          badge = "\u2705 Result";
-          if (data.duration_ms) meta = `${data.duration_ms}ms`;
+          return createResultMessage(data);
+        } else if (data.type === "claude_response") {
+          return createClaudeResponseMessage(data);
         } else {
-          content = JSON.stringify(data, null, 1);
+          return createFallbackMessage(data);
         }
-        const badgeHtml = badge ? `<div class="message-badge">${HtmlUtils.escapeHtml(badge)}</div>` : "";
-        return `<div class="message-wrapper">${badgeHtml}<div class="message-content">${HtmlUtils.escapeHtml(content)}</div>${meta ? `<div class="message-meta">${meta}</div>` : ""}</div>`;
       } catch (error) {
-        console.error("Error formatting Claude message:", error);
-        return `<div class="message-content">${HtmlUtils.escapeHtml(JSON.stringify(data))}</div>`;
+        console.error("Error creating message:", error);
+        return createErrorMessage(data);
       }
     }
-    extractAssistantContent(content) {
+    function updateMessage(toolCallId, result) {
+      const toolCall = pendingToolCalls.get(toolCallId);
+      if (!toolCall) return null;
+      pendingToolCalls.delete(toolCallId);
+      return formatToolComplete(toolCall, result);
+    }
+    function clearMessages() {
+      lastMessageHash = "";
+      messageHistory.clear();
+      pendingToolCalls.clear();
+    }
+    function createAssistantMessage(data) {
+      if (!data.message?.content) return null;
+      const extracted = extractContentFromAssistant(data.message.content);
+      if (extracted.toolCall) {
+        const toolCall = extracted.toolCall;
+        pendingToolCalls.set(toolCall.id, {
+          id: toolCall.id,
+          name: toolCall.name,
+          input: toolCall.input,
+          status: "pending"
+        });
+        return {
+          html: formatToolPending(toolCall),
+          toolCallId: toolCall.id
+        };
+      }
+      const meta = data.message?.usage ? `${data.message.usage.input_tokens || 0}\u2191 ${data.message.usage.output_tokens || 0}\u2193` : "";
+      return formatMessage(HtmlUtils.escapeHtml(extracted.text), extracted.badge, meta);
+    }
+    function createUserMessage(data) {
+      if (!data.message?.content) return null;
+      const extracted = extractContentFromUser(data.message.content);
+      if (extracted.toolResult) {
+        const toolCallId = extracted.toolResult.tool_use_id;
+        if (pendingToolCalls.has(toolCallId)) {
+          const toolCall = pendingToolCalls.get(toolCallId);
+          pendingToolCalls.delete(toolCallId);
+          return {
+            html: formatToolComplete(toolCall, extracted.toolResult),
+            toolCallId
+          };
+        }
+      }
+      return formatMessage(HtmlUtils.escapeHtml(extracted.text), extracted.badge);
+    }
+    function createSystemMessage(data) {
+      const content = `System: ${data.subtype || "message"}`;
+      const meta = data.cwd ? data.cwd : "";
+      return formatMessage(HtmlUtils.escapeHtml(content), "System", meta);
+    }
+    function createResultMessage(data) {
+      const content = data.result || "Task completed";
+      const meta = data.duration_ms ? `${data.duration_ms}ms` : "";
+      return formatMessage(HtmlUtils.escapeHtml(content), "Result", meta);
+    }
+    function createClaudeResponseMessage(response) {
+      let content = "";
+      if (response.duration_ms) {
+        content += `<strong>Total Time:</strong> ${response.duration_ms}ms`;
+        if (response.duration_api_ms) {
+          content += ` (API: ${response.duration_api_ms}ms)`;
+        }
+        content += "<br>";
+      }
+      if (response.total_cost_usd) {
+        content += `<strong>Cost:</strong> $${response.total_cost_usd.toFixed(4)}<br>`;
+      }
+      if (response.usage) {
+        const usage = response.usage;
+        const tokens = [];
+        if (usage.input_tokens) tokens.push(`${usage.input_tokens}\u2191`);
+        if (usage.output_tokens) tokens.push(`${usage.output_tokens}\u2193`);
+        if (usage.cache_read_input_tokens) tokens.push(`${usage.cache_read_input_tokens}(cached)`);
+        if (tokens.length > 0) {
+          content += `<strong>Tokens:</strong> ${tokens.join(" ")}<br>`;
+        }
+      }
+      if (response.num_turns) {
+        content += `<strong>Turns:</strong> ${response.num_turns}<br>`;
+      }
+      const metaParts = [];
+      if (response.duration_ms) metaParts.push(`${response.duration_ms}ms`);
+      if (response.total_cost_usd) metaParts.push(`$${response.total_cost_usd.toFixed(4)}`);
+      return formatMessage(content, "Claude Complete", metaParts.join(" \u2022 "));
+    }
+    function createFallbackMessage(data) {
+      const content = typeof data === "string" ? data : JSON.stringify(data, null, 2);
+      const displayContent = content.length > CONFIG.MAX_CONTENT_LENGTH ? content.substring(0, CONFIG.MAX_CONTENT_LENGTH) + "..." : content;
+      const formattedContent = typeof data === "object" ? `<pre style="background:#f5f5f5;padding:6px;border-radius:4px;overflow-x:auto;font-size:8px"><code>${HtmlUtils.escapeHtml(displayContent)}</code></pre>` : HtmlUtils.escapeHtml(displayContent);
+      return formatMessage(formattedContent, "Claude");
+    }
+    function createErrorMessage(data) {
+      const errorContent = `<pre style="background:#fee;padding:6px;border-radius:4px;overflow-x:auto;font-size:8px"><code>${HtmlUtils.escapeHtml(JSON.stringify(data))}</code></pre>`;
+      return formatMessage(errorContent, "Error");
+    }
+    function formatMessage(content, badge, meta) {
+      const badgeHtml = badge ? `<div class="message-badge">${HtmlUtils.escapeHtml(badge)}</div>` : "";
+      const metaHtml = meta ? `<div class="message-meta">${meta}</div>` : "";
+      return `<div class="message-wrapper">${badgeHtml}<div class="message-content">${content}</div>${metaHtml}</div>`;
+    }
+    function formatToolPending(toolCall) {
+      let content = `<strong>${HtmlUtils.escapeHtml(toolCall.name)}</strong>`;
+      if (toolCall.input) {
+        const inputStr = JSON.stringify(toolCall.input, null, 2);
+        const truncatedInput = inputStr.length > CONFIG.MAX_CONTENT_LENGTH ? inputStr.substring(0, CONFIG.MAX_CONTENT_LENGTH) + "..." : inputStr;
+        content += `<br><strong>Input:</strong><br><pre style="background:#f5f5f5;padding:6px;border-radius:4px;overflow-x:auto;font-size:8px"><code>${HtmlUtils.escapeHtml(truncatedInput)}</code></pre>`;
+      }
+      content += `<br>Running...`;
+      return formatMessage(content, "Tool Running");
+    }
+    function formatToolComplete(toolCall, result) {
+      let content = `<strong>${HtmlUtils.escapeHtml(toolCall.name)}</strong>`;
+      if (toolCall.input) {
+        const inputStr = JSON.stringify(toolCall.input, null, 2);
+        const truncatedInput = inputStr.length > CONFIG.MAX_CONTENT_LENGTH ? inputStr.substring(0, CONFIG.MAX_CONTENT_LENGTH) + "..." : inputStr;
+        content += `<br><strong>Input:</strong><br><pre style="background:#f5f5f5;padding:6px;border-radius:4px;overflow-x:auto;font-size:8px"><code>${HtmlUtils.escapeHtml(truncatedInput)}</code></pre>`;
+      }
+      const resultContent = typeof result.content === "string" ? result.content : JSON.stringify(result.content);
+      if (result.is_error) {
+        content += `<br><strong>Error:</strong> ${HtmlUtils.escapeHtml(resultContent || "Unknown error")}`;
+      } else if (resultContent && resultContent.trim()) {
+        const truncatedResult = resultContent.length > CONFIG.MAX_RESULT_LENGTH ? resultContent.substring(0, CONFIG.MAX_RESULT_LENGTH) + "..." : resultContent;
+        content += `<strong>Output:</strong><br><pre style="background:#f5f5f5;padding:6px;border-radius:4px;overflow-x:auto;font-size:8px"><code>${HtmlUtils.escapeHtml(truncatedResult)}</code></pre>`;
+      } else {
+        content += `<strong>Output:</strong><br>[done]`;
+      }
+      const badge = result.is_error ? "Tool Error" : "Tool Complete";
+      return formatMessage(content, badge);
+    }
+    function extractContentFromAssistant(content) {
       const items = content.map((item) => {
         if (item.type === "text") {
           return { text: item.text, badge: void 0 };
         } else if (item.type === "tool_use") {
           return {
             text: `${item.name}${item.input ? ": " + JSON.stringify(item.input).substring(0, 100) + "..." : ""}`,
-            badge: "\u{1F527} Edit"
+            badge: "Edit",
+            toolCall: item
           };
         }
         return { text: "", badge: void 0 };
@@ -3948,50 +4309,57 @@
       if (toolUseItem) {
         return {
           text: items.map((item) => item.text).join("\n"),
-          badge: toolUseItem.badge
+          badge: toolUseItem.badge,
+          toolCall: toolUseItem.toolCall
         };
       }
       return { text: items.map((item) => item.text).join("\n") };
     }
-    extractUserContent(content) {
+    function extractContentFromUser(content) {
       const items = content.map((item) => {
         if (item.type === "text") {
           return { text: item.text, badge: void 0 };
         } else if (item.type === "tool_result") {
           const result = typeof item.content === "string" ? item.content : JSON.stringify(item.content);
           return {
-            text: `${result.substring(0, 150)}${result.length > 150 ? "..." : ""}`,
-            badge: "\u{1F4E4} Tool result"
+            text: `${result.substring(0, CONFIG.MAX_INPUT_DISPLAY)}${result.length > CONFIG.MAX_INPUT_DISPLAY ? "..." : ""}`,
+            badge: "Tool result",
+            toolResult: item
           };
         }
         return { text: "", badge: void 0 };
-      }).filter((item) => item.text);
-      if (items.length === 0) return { text: "" };
-      const toolResultItem = items.find((item) => item.badge);
+      });
+      const toolResultItem = items.find((item) => item.toolResult);
       if (toolResultItem) {
         return {
-          text: items.map((item) => item.text).join("\n"),
-          badge: toolResultItem.badge
+          text: items.filter((item) => item.text).map((item) => item.text).join("\n"),
+          badge: toolResultItem.badge,
+          toolResult: toolResultItem.toolResult
         };
       }
-      return { text: items.map((item) => item.text).join("\n") };
+      const filteredItems = items.filter((item) => item.text);
+      if (filteredItems.length === 0) return { text: "" };
+      return { text: filteredItems.map((item) => item.text).join("\n") };
     }
-    hashMessage(jsonData) {
+    function hashMessage(jsonData) {
       let content = "";
       if (jsonData.type === "assistant" && jsonData.message?.content) {
-        content = this.extractAssistantContent(jsonData.message.content).text;
+        content = extractContentFromAssistant(jsonData.message.content).text;
       } else if (jsonData.type === "user" && jsonData.message?.content) {
-        content = this.extractUserContent(jsonData.message.content).text;
+        content = extractContentFromUser(jsonData.message.content).text;
       } else {
         content = JSON.stringify(jsonData);
       }
       return HtmlUtils.hashString(content || "");
     }
-    clearHistory() {
-      this.lastMessageHash = "";
-      this.messageHistory.clear();
-    }
-  };
+    return {
+      formatPrompt,
+      shouldShowMessage,
+      createMessage,
+      updateMessage,
+      clearMessages
+    };
+  }
 
   // node_modules/mitt/dist/mitt.mjs
   function mitt_default(n) {
@@ -4012,20 +4380,16 @@
   }
 
   // src/inspector/events.ts
-  var ToolbarEventEmitter = class {
-    constructor() {
-      this.emitter = mitt_default();
-    }
-    // Emit events with error handling
-    emit(event, data) {
+  function createToolbarEventEmitter() {
+    const emitter = mitt_default();
+    function emit(event, data) {
       try {
-        this.emitter.emit(event, data);
+        emitter.emit(event, data);
       } catch (error) {
         console.error(`Error emitting toolbar event ${String(event)}:`, error);
       }
     }
-    // Listen to events with error handling
-    on(event, handler) {
+    function on(event, handler) {
       const safeHandler = (data) => {
         try {
           handler(data);
@@ -4033,34 +4397,37 @@
           console.error(`Error handling toolbar event ${String(event)}:`, error);
         }
       };
-      this.emitter.on(event, safeHandler);
-      return () => this.emitter.off(event, safeHandler);
+      emitter.on(event, safeHandler);
+      return () => emitter.off(event, safeHandler);
     }
-    // Remove all listeners (for cleanup)
-    cleanup() {
-      this.emitter.all.clear();
+    function cleanup() {
+      emitter.all.clear();
     }
-  };
+    return {
+      emit,
+      on,
+      cleanup
+    };
+  }
 
   // src/inspector-toolbar.ts
   var InspectorToolbar = class extends HTMLElement {
     constructor() {
       super();
       // Event-driven architecture
-      this.events = new ToolbarEventEmitter();
-      this.stateManager = new ToolbarStateManager(this.events);
-      // Managers
-      this.selectionManager = new ElementSelectionManager();
-      this.aiManager = new AIManager();
-      this.messageFormatter = new MessageFormatter();
+      this.events = createToolbarEventEmitter();
       // Event cleanup functions
       this.cleanupFunctions = [];
       this.attachShadow({ mode: "open" });
-      this.inspectionManager = new InspectionManager(
+      this.stateManager = createToolbarStateManager(this.events);
+      this.selectionManager = createElementSelectionManager();
+      this.aiManager = createAIManager();
+      this.inspectionManager = createInspectionManager(
         (element) => this.handleElementSelection(element),
         (element) => this.shouldIgnoreElement(element),
         (element) => this.selectionManager.hasElement(element)
       );
+      this.messageFormatter = createMessageFormatter();
       this.render();
       this.setupEventListeners();
       this.attachDOMEventListeners();
@@ -4087,7 +4454,8 @@
     }
     render() {
       if (!this.shadowRoot) return;
-      this.shadowRoot.innerHTML = UIRenderer.renderToolbar();
+      this.shadowRoot.innerHTML = renderToolbar();
+      this.updateClearButtonVisibility();
     }
     setupEventListeners() {
       this.cleanupFunctions.push(
@@ -4108,7 +4476,10 @@
         this.events.on("messages:add", (message) => this.displayMessage(message)),
         this.events.on("messages:clear", () => this.clearMessagesDisplay()),
         this.events.on("prompt:clear", () => this.clearPromptInput()),
-        this.events.on("selection:clear", () => this.selectionManager.clearAllSelections()),
+        this.events.on("selection:clear", () => {
+          this.selectionManager.clearAllSelections();
+          this.updateClearButtonVisibility();
+        }),
         this.events.on("notification:show", ({ message, type }) => {
           if (type === "info") {
             this.showNotification(message, "success");
@@ -4168,6 +4539,14 @@
       }
     }
     updateSelectionDisplay() {
+      this.updateClearButtonVisibility();
+    }
+    updateClearButtonVisibility() {
+      const clearElementButton = this.shadowRoot?.getElementById("clearElementButton");
+      if (clearElementButton) {
+        const hasSelectedElements = this.selectionManager.getSelectedCount() > 0;
+        clearElementButton.style.display = hasSelectedElements ? "inline-flex" : "none";
+      }
     }
     displayMessage(message) {
       this.displayJsonMessage(message);
@@ -4188,7 +4567,6 @@
       const promptInput = this.shadowRoot.getElementById("promptInput");
       const newChatButton = this.shadowRoot.getElementById("newChatButton");
       const cancelButton = this.shadowRoot.getElementById("cancelButton");
-      const jsonClearButton = this.shadowRoot.getElementById("jsonClearButton");
       toggleButton?.addEventListener("click", (evt) => {
         evt.preventDefault();
         evt.stopPropagation();
@@ -4225,12 +4603,15 @@
         this.events.emit("ui:exit-inspection", void 0);
       });
       newChatButton?.addEventListener("click", async () => {
+        if (this.stateManager.isProcessing()) {
+          console.log("Cannot start new chat while processing");
+          return;
+        }
         if (promptInput) promptInput.value = "";
         this.selectionManager.clearAllSelections();
+        this.updateClearButtonVisibility();
         this.clearJsonDisplay();
-        if (!this.stateManager.isProcessing()) {
-          this.events.emit("ui:enter-inspection", void 0);
-        }
+        this.events.emit("ui:enter-inspection", void 0);
         if (this.aiManager.isInitialized()) {
           try {
             await this.aiManager.newChat();
@@ -4249,6 +4630,7 @@
           this.showNotification("Request cancelled", "success");
           if (promptInput) promptInput.value = "";
           this.selectionManager.clearAllSelections();
+          this.updateClearButtonVisibility();
           this.clearJsonDisplay();
           if (this.aiManager.isInitialized()) {
             try {
@@ -4259,9 +4641,6 @@
             }
           }
         }
-      });
-      jsonClearButton?.addEventListener("click", () => {
-        this.clearJsonDisplay();
       });
       promptInput?.addEventListener("keydown", (e) => {
         if (e.key === "Enter" && !e.shiftKey) {
@@ -4286,8 +4665,9 @@
       if (this.selectionManager.hasElement(element)) {
         this.selectionManager.deselectElement(element);
       } else {
-        this.selectionManager.selectElement(element, ComponentDetector.findNearestComponent);
+        this.selectionManager.selectElement(element, findNearestComponent);
       }
+      this.updateClearButtonVisibility();
     }
     shouldIgnoreElement(element) {
       if (element === this || this.contains(element)) return true;
@@ -4324,7 +4704,7 @@
       }
       const pageInfo = this.getCurrentPageInfo();
       const selectedElementsHierarchy = this.selectionManager.buildHierarchicalStructure(
-        ComponentDetector.findNearestComponent
+        findNearestComponent
       );
       if (this.aiEndpoint) {
         await this.callAI(prompt, selectedElementsHierarchy, pageInfo);
@@ -4355,6 +4735,9 @@
             if (data.type === "claude_json") {
               this.hideProcessingIndicator();
               this.displayJsonMessage(data.claudeJson);
+            } else if (data.type === "claude_response") {
+              this.hideProcessingIndicator();
+              this.displayJsonMessage(data.claudeResponse);
             } else if (data.type === "complete") {
               if (promptInput) promptInput.value = "";
               this.setProcessingState(false);
@@ -4393,14 +4776,39 @@
       const jsonDisplay = this.shadowRoot?.getElementById("jsonDisplay");
       const jsonContent = this.shadowRoot?.getElementById("jsonContent");
       if (!jsonDisplay || !jsonContent) return;
-      if (!this.messageFormatter.shouldDisplayMessage(jsonData)) {
+      if (!this.messageFormatter.shouldShowMessage(jsonData)) {
+        return;
+      }
+      const formattedMessage = this.messageFormatter.createMessage(jsonData);
+      if (!formattedMessage) {
         return;
       }
       jsonDisplay.classList.add("show");
-      const messageElement = document.createElement("div");
-      messageElement.classList.add("json-message", jsonData.type || "generic");
-      messageElement.innerHTML = this.messageFormatter.formatClaudeMessage(jsonData);
-      jsonContent.appendChild(messageElement);
+      if (typeof formattedMessage === "string") {
+        const messageElement = document.createElement("div");
+        messageElement.classList.add("json-message", jsonData.type || "generic");
+        messageElement.innerHTML = formattedMessage;
+        jsonContent.appendChild(messageElement);
+      } else {
+        const { html, toolCallId } = formattedMessage;
+        if (toolCallId) {
+          const existingElement = jsonContent.querySelector(`[data-tool-call-id="${toolCallId}"]`);
+          if (existingElement) {
+            existingElement.innerHTML = html;
+          } else {
+            const messageElement = document.createElement("div");
+            messageElement.classList.add("json-message", jsonData.type || "generic");
+            messageElement.setAttribute("data-tool-call-id", toolCallId);
+            messageElement.innerHTML = html;
+            jsonContent.appendChild(messageElement);
+          }
+        } else {
+          const messageElement = document.createElement("div");
+          messageElement.classList.add("json-message", jsonData.type || "generic");
+          messageElement.innerHTML = html;
+          jsonContent.appendChild(messageElement);
+        }
+      }
       jsonContent.scrollTop = jsonContent.scrollHeight;
     }
     clearJsonDisplay() {
@@ -4409,7 +4817,7 @@
       if (!jsonDisplay || !jsonContent) return;
       jsonContent.innerHTML = "";
       jsonDisplay.classList.remove("show");
-      this.messageFormatter.clearHistory();
+      this.messageFormatter.clearMessages();
     }
     setProcessingState(isProcessing) {
       if (isProcessing) {

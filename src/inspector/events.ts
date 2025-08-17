@@ -3,7 +3,7 @@
  * Uses mitt for clean event-driven state management within the toolbar only
  */
 
-import mitt, { type Emitter } from 'mitt'
+import mitt from 'mitt'
 import type { ElementData, SendMessageResponse } from '../shared/types'
 
 export type ToolbarInternalEvents = {
@@ -37,27 +37,38 @@ export type ToolbarInternalEvents = {
   'notification:show': { message: string; type: 'success' | 'error' | 'info' }
 }
 
-export class ToolbarEventEmitter {
-  private emitter: Emitter<ToolbarInternalEvents>
-  
-  constructor() {
-    this.emitter = mitt<ToolbarInternalEvents>()
-  }
+export interface ToolbarEventEmitter {
+  emit<T extends keyof ToolbarInternalEvents>(
+    event: T,
+    data: ToolbarInternalEvents[T]
+  ): void
+  on<T extends keyof ToolbarInternalEvents>(
+    event: T,
+    handler: (data: ToolbarInternalEvents[T]) => void
+  ): () => void
+  cleanup(): void
+}
+
+/**
+ * Create a toolbar event emitter with error handling
+ */
+export function createToolbarEventEmitter(): ToolbarEventEmitter {
+  const emitter = mitt<ToolbarInternalEvents>()
   
   // Emit events with error handling
-  emit<T extends keyof ToolbarInternalEvents>(
+  function emit<T extends keyof ToolbarInternalEvents>(
     event: T,
     data: ToolbarInternalEvents[T]
   ): void {
     try {
-      this.emitter.emit(event, data)
+      emitter.emit(event, data)
     } catch (error) {
       console.error(`Error emitting toolbar event ${String(event)}:`, error)
     }
   }
   
   // Listen to events with error handling
-  on<T extends keyof ToolbarInternalEvents>(
+  function on<T extends keyof ToolbarInternalEvents>(
     event: T,
     handler: (data: ToolbarInternalEvents[T]) => void
   ): () => void {
@@ -69,14 +80,20 @@ export class ToolbarEventEmitter {
       }
     }
     
-    this.emitter.on(event, safeHandler)
+    emitter.on(event, safeHandler)
     
     // Return cleanup function
-    return () => this.emitter.off(event, safeHandler)
+    return () => emitter.off(event, safeHandler)
   }
   
   // Remove all listeners (for cleanup)
-  cleanup(): void {
-    this.emitter.all.clear()
+  function cleanup(): void {
+    emitter.all.clear()
+  }
+
+  return {
+    emit,
+    on,
+    cleanup
   }
 }
