@@ -4122,8 +4122,14 @@
       this.cleanupFunctions.push(
         this.events.on("ui:expand", () => this.updateExpandedState(true)),
         this.events.on("ui:collapse", () => this.updateExpandedState(false)),
-        this.events.on("ui:enter-inspection", () => this.updateInspectionState(true)),
-        this.events.on("ui:exit-inspection", () => this.updateInspectionState(false)),
+        this.events.on("ui:enter-inspection", () => {
+          this.enterInspectionMode();
+          this.updateInspectionState(true);
+        }),
+        this.events.on("ui:exit-inspection", () => {
+          this.exitInspectionMode();
+          this.updateInspectionState(false);
+        }),
         this.events.on("ui:processing-start", () => this.updateProcessingState(true)),
         this.events.on("ui:processing-end", () => this.updateProcessingState(false)),
         this.events.on("session:updated", ({ sessionId }) => this.updateSessionDisplay(sessionId)),
@@ -4254,7 +4260,7 @@
         this.selectionManager.clearAllSelections();
         this.clearJsonDisplay();
         if (!this.stateManager.isProcessing()) {
-          this.enterInspectionMode();
+          this.events.emit("ui:enter-inspection", void 0);
         }
         if (this.aiManager.isInitialized()) {
           try {
@@ -4334,7 +4340,7 @@
       console.log("AI Prompt submitted:", prompt);
       console.log("Selected elements:", Array.from(this.selectionManager.getSelectedElements().keys()));
       if (this.inspectionManager.isInInspectionMode()) {
-        this.exitInspectionMode();
+        this.events.emit("ui:exit-inspection", void 0);
       }
       const pageInfo = this.getCurrentPageInfo();
       const selectedElementsHierarchy = this.selectionManager.buildHierarchicalStructure(

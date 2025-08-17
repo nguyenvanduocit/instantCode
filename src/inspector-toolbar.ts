@@ -76,8 +76,14 @@ export class InspectorToolbar extends HTMLElement {
     this.cleanupFunctions.push(
       this.events.on('ui:expand', () => this.updateExpandedState(true)),
       this.events.on('ui:collapse', () => this.updateExpandedState(false)),
-      this.events.on('ui:enter-inspection', () => this.updateInspectionState(true)),
-      this.events.on('ui:exit-inspection', () => this.updateInspectionState(false)),
+      this.events.on('ui:enter-inspection', () => {
+        this.enterInspectionMode()
+        this.updateInspectionState(true)
+      }),
+      this.events.on('ui:exit-inspection', () => {
+        this.exitInspectionMode() 
+        this.updateInspectionState(false)
+      }),
       this.events.on('ui:processing-start', () => this.updateProcessingState(true)),
       this.events.on('ui:processing-end', () => this.updateProcessingState(false)),
       this.events.on('session:updated', ({ sessionId }) => this.updateSessionDisplay(sessionId)),
@@ -176,7 +182,6 @@ export class InspectorToolbar extends HTMLElement {
     if (!this.shadowRoot) return
 
     const toggleButton = this.shadowRoot.getElementById('toggleButton')
-    const toolbarCard = this.shadowRoot.getElementById('toolbarCard')
     const inspectButton = this.shadowRoot.getElementById('inspectButton')
     const clearElementButton = this.shadowRoot.getElementById('clearElementButton')
     const closeInspectButton = this.shadowRoot.getElementById('closeInspectButton')
@@ -242,7 +247,7 @@ export class InspectorToolbar extends HTMLElement {
       this.clearJsonDisplay()
       
       if (!this.stateManager.isProcessing()) {
-        this.enterInspectionMode()
+        this.events.emit('ui:enter-inspection', undefined)
       }
 
       if (this.aiManager.isInitialized()) {
@@ -343,7 +348,7 @@ export class InspectorToolbar extends HTMLElement {
 
     // Exit inspection mode when prompt is submitted
     if (this.inspectionManager.isInInspectionMode()) {
-      this.exitInspectionMode()
+      this.events.emit('ui:exit-inspection', undefined)
     }
 
     const pageInfo = this.getCurrentPageInfo()
