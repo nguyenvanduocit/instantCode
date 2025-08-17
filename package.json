@@ -1,0 +1,47 @@
+{
+  "name": "frontend-context-server",
+  "version": "1.0.0",
+  "description": "Standalone server for Frontend Context - Pick elements and send context to AI",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "build:inspector": "node build-inspector.js",
+    "build:all": "npm run build && npm run build:inspector",
+    "dev": "bun src/index.ts",
+    "start": "node dist/index.js",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "frontend",
+    "ai",
+    "element-picker",
+    "web-development",
+    "server"
+  ],
+  "author": "Nguyen Van Duoc <nguyenvanduocit@gmail.com>",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/claude-code": "^1.0.83",
+    "@trpc/client": "^11.4.4",
+    "@trpc/server": "^11.4.4",
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "superjson": "^2.2.2",
+    "ws": "^8.18.3",
+    "zod": "^4.0.17"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.20",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.2",
+    "@types/node": "^22.13.4",
+    "@types/ws": "^8.18.1",
+    "esbuild": "^0.25.9",
+    "tsx": "^4.7.0",
+    "typescript": "^5.7.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
