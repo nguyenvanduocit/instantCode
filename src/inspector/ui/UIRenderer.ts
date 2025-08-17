@@ -23,6 +23,9 @@ export class UIRenderer {
           <div class="session-info" id="sessionInfo">
             <span class="session-label">Session:</span>
             <span class="session-id" id="sessionId">-</span>
+            <button class="action-button cancel-button" id="cancelButton">
+              <span>Cancel</span>
+            </button>
             <button class="action-button new-chat-button" id="newChatButton">
               <span>New Chat</span>
             </button>

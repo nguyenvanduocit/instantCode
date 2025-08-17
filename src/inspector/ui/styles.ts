@@ -267,6 +267,41 @@ export const TOOLBAR_STYLES = `
     background: #358a6c;
   }
 
+  .cancel-button {
+    background: #f59e0b;
+    border: 1px solid #d97706;
+    color: white;
+    display: none;
+  }
+
+  .cancel-button:hover {
+    background: #e5890c;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 6px rgba(245, 158, 11, 0.2);
+  }
+
+  .cancel-button:active {
+    transform: translateY(0);
+    background: #d97706;
+  }
+
+  .clear-button {
+    background: #6b7280;
+    border: 1px solid #4b5563;
+    color: white;
+  }
+
+  .clear-button:hover {
+    background: #5d646f;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 6px rgba(107, 114, 128, 0.2);
+  }
+
+  .clear-button:active {
+    transform: translateY(0);
+    background: #4b5563;
+  }
+
   .copy-button {
     background: #8b5cf6;
     border: 1px solid #7c3aed;

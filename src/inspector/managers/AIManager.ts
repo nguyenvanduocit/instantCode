@@ -101,11 +101,13 @@ export class AIManager {
           
           if (data.type === 'complete') {
             console.log('AI request completed with session ID:', data.sessionId)
+            this.currentSubscription = null
             handler.onComplete()
           }
         },
         onError: (error) => {
           console.error('Subscription error:', error)
+          this.currentSubscription = null
           handler.onError(error)
         },
       }
@@ -129,12 +131,24 @@ export class AIManager {
     }
   }
 
+  cancel(): void {
+    if (this.currentSubscription) {
+      console.log('Cancelling current AI request')
+      this.currentSubscription.unsubscribe()
+      this.currentSubscription = null
+    }
+  }
+
   getSessionId(): string | null {
     return this.globalSessionId
   }
 
   isInitialized(): boolean {
     return this.trpcClient !== null
+  }
+
+  isProcessing(): boolean {
+    return this.currentSubscription !== null
   }
 
   destroy(): void {

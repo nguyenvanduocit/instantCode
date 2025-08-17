@@ -74,6 +74,7 @@ export class InspectorToolbar extends HTMLElement {
     const closeInspectButton = this.shadowRoot.getElementById('closeInspectButton')
     const promptInput = this.shadowRoot.getElementById('promptInput') as HTMLTextAreaElement
     const newChatButton = this.shadowRoot.getElementById('newChatButton')
+    const cancelButton = this.shadowRoot.getElementById('cancelButton')
     const jsonClearButton = this.shadowRoot.getElementById('jsonClearButton')
 
     // Toggle expand/collapse
@@ -151,6 +152,14 @@ export class InspectorToolbar extends HTMLElement {
       }
     })
 
+    // Cancel button
+    cancelButton?.addEventListener('click', () => {
+      if (this.aiManager.isProcessing()) {
+        this.aiManager.cancel()
+        this.setProcessingState(false)
+        this.showNotification('Request cancelled', 'success')
+      }
+    })
 
     // JSON clear button
     jsonClearButton?.addEventListener('click', () => {
@@ -360,6 +369,9 @@ export class InspectorToolbar extends HTMLElement {
     } else {
       toolbarCard?.classList.remove('processing')
     }
+    
+    // Update session display to show/hide cancel button
+    this.updateSessionDisplay()
   }
 
   private hideProcessingIndicator(): void {
@@ -372,6 +384,7 @@ export class InspectorToolbar extends HTMLElement {
   private updateSessionDisplay(): void {
     const sessionInfoElement = this.shadowRoot?.getElementById('sessionInfo')
     const sessionIdElement = this.shadowRoot?.getElementById('sessionId')
+    const cancelButton = this.shadowRoot?.getElementById('cancelButton')
     
     if (sessionInfoElement && sessionIdElement) {
       const sessionId = this.aiManager.getSessionId()
@@ -382,6 +395,15 @@ export class InspectorToolbar extends HTMLElement {
         sessionIdElement.title = sessionId
       } else {
         sessionInfoElement.style.display = 'none'
+      }
+      
+      // Show/hide cancel button based on processing state
+      if (cancelButton) {
+        if (this.aiManager.isProcessing()) {
+          cancelButton.style.display = 'inline-flex'
+        } else {
+          cancelButton.style.display = 'none'
+        }
       }
     }
   }

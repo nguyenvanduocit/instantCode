@@ -33,7 +33,7 @@ export const appRouter = router({
 
   sendMessage: publicProcedure
     .input(StructuredMessageSchema)
-    .subscription(async function* ({ input }) {
+    .subscription(async function* ({ input, signal }) {
       yield {
         type: 'connection',
         message: 'Connected to Frontend Context',
@@ -72,12 +72,21 @@ export const appRouter = router({
           message: 'Processing with Claude...',
         } as SendMessageResponse
 
+        const abortController = new AbortController()
+        
+        // Forward the tRPC signal cancellation to our AbortController
+        if (signal) {
+          signal.addEventListener('abort', () => {
+            abortController.abort()
+          })
+        }
+
         const queryOptions: Options = {
           permissionMode: "bypassPermissions",
           maxTurns: 50,
           executable: "bun",
           cwd: input.cwd,
-          //abortController
+          abortController
         }
 
         // Add resumeSessionId if sessionId is provided
@@ -89,6 +98,15 @@ export const appRouter = router({
           prompt: formattedPrompt,
           options: queryOptions
         })) {
+          // Check if the request was cancelled
+          if (abortController.signal.aborted) {
+            yield {
+              type: 'progress',
+              message: 'Request was cancelled',
+            } as SendMessageResponse
+            break
+          }
+
           // Update current session ID if Claude provides one
           if (message.session_id) {
             currentSessionId = message.session_id
@@ -125,19 +143,36 @@ export const appRouter = router({
           sessionId: currentSessionId,
         } as SendMessageResponse
       } catch (error) {
-        console.error('Claude processing error:', error)
-        yield {
-          type: 'progress',
-          message: 'Error processing with Claude: ' + (error as Error).message,
-        } as SendMessageResponse
+        // Check if the error is due to cancellation
+        if (error instanceof Error && error.name === 'AbortError') {
+          console.log('Claude processing was cancelled')
+          yield {
+            type: 'progress',
+            message: 'Request was cancelled',
+          } as SendMessageResponse
+          
+          yield {
+            type: 'complete',
+            message: 'Processing was cancelled',
+            prompt: formattedPrompt,
+            componentLocations,
+            sessionId: currentSessionId,
+          } as SendMessageResponse
+        } else {
+          console.error('Claude processing error:', error)
+          yield {
+            type: 'progress',
+            message: 'Error processing with Claude: ' + (error as Error).message,
+          } as SendMessageResponse
 
-        yield {
-          type: 'complete',
-          message: 'Processing completed with errors',
-          prompt: formattedPrompt,
-          componentLocations,
-          sessionId: currentSessionId,
-        } as SendMessageResponse
+          yield {
+            type: 'complete',
+            message: 'Processing completed with errors',
+            prompt: formattedPrompt,
+            componentLocations,
+            sessionId: currentSessionId,
+          } as SendMessageResponse
+        }
       }
     }),
 

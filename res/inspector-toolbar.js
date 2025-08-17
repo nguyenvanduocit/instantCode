@@ -2904,11 +2904,13 @@
             handler.onData(data);
             if (data.type === "complete") {
               console.log("AI request completed with session ID:", data.sessionId);
+              this.currentSubscription = null;
               handler.onComplete();
             }
           },
           onError: (error) => {
             console.error("Subscription error:", error);
+            this.currentSubscription = null;
             handler.onError(error);
           }
         }
@@ -2929,11 +2931,21 @@
         throw new Error("tRPC client not initialized");
       }
     }
+    cancel() {
+      if (this.currentSubscription) {
+        console.log("Cancelling current AI request");
+        this.currentSubscription.unsubscribe();
+        this.currentSubscription = null;
+      }
+    }
     getSessionId() {
       return this.globalSessionId;
     }
     isInitialized() {
       return this.trpcClient !== null;
+    }
+    isProcessing() {
+      return this.currentSubscription !== null;
     }
     destroy() {
       if (this.currentSubscription) {
@@ -3388,6 +3400,41 @@
     background: #358a6c;
   }
 
+  .cancel-button {
+    background: #f59e0b;
+    border: 1px solid #d97706;
+    color: white;
+    display: none;
+  }
+
+  .cancel-button:hover {
+    background: #e5890c;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 6px rgba(245, 158, 11, 0.2);
+  }
+
+  .cancel-button:active {
+    transform: translateY(0);
+    background: #d97706;
+  }
+
+  .clear-button {
+    background: #6b7280;
+    border: 1px solid #4b5563;
+    color: white;
+  }
+
+  .clear-button:hover {
+    background: #5d646f;
+    transform: translateY(-1px);
+    box-shadow: 0 3px 6px rgba(107, 114, 128, 0.2);
+  }
+
+  .clear-button:active {
+    transform: translateY(0);
+    background: #4b5563;
+  }
+
   .copy-button {
     background: #8b5cf6;
     border: 1px solid #7c3aed;
@@ -3638,6 +3685,9 @@
           <div class="session-info" id="sessionInfo">
             <span class="session-label">Session:</span>
             <span class="session-id" id="sessionId">-</span>
+            <button class="action-button cancel-button" id="cancelButton">
+              <span>Cancel</span>
+            </button>
             <button class="action-button new-chat-button" id="newChatButton">
               <span>New Chat</span>
             </button>
@@ -3900,9 +3950,11 @@
       const toggleButton = this.shadowRoot.getElementById("toggleButton");
       const toolbarCard = this.shadowRoot.getElementById("toolbarCard");
       const inspectButton = this.shadowRoot.getElementById("inspectButton");
+      const clearElementButton = this.shadowRoot.getElementById("clearElementButton");
       const closeInspectButton = this.shadowRoot.getElementById("closeInspectButton");
       const promptInput = this.shadowRoot.getElementById("promptInput");
       const newChatButton = this.shadowRoot.getElementById("newChatButton");
+      const cancelButton = this.shadowRoot.getElementById("cancelButton");
       const jsonClearButton = this.shadowRoot.getElementById("jsonClearButton");
       toggleButton?.addEventListener("click", (evt) => {
         evt.preventDefault();
@@ -3938,6 +3990,9 @@
           this.enterInspectionMode();
         }
       });
+      clearElementButton?.addEventListener("click", () => {
+        this.selectionManager.clearAllSelections();
+      });
       closeInspectButton?.addEventListener("click", () => {
         this.exitInspectionMode();
       });
@@ -3957,6 +4012,13 @@
           }
         } else {
           console.warn("AI manager not initialized");
+        }
+      });
+      cancelButton?.addEventListener("click", () => {
+        if (this.aiManager.isProcessing()) {
+          this.aiManager.cancel();
+          this.setProcessingState(false);
+          this.showNotification("Request cancelled", "success");
         }
       });
       jsonClearButton?.addEventListener("click", () => {
@@ -4120,6 +4182,7 @@
       } else {
         toolbarCard?.classList.remove("processing");
       }
+      this.updateSessionDisplay();
     }
     hideProcessingIndicator() {
       const processingIndicator = this.shadowRoot?.getElementById("processingIndicator");
@@ -4130,6 +4193,7 @@
     updateSessionDisplay() {
       const sessionInfoElement = this.shadowRoot?.getElementById("sessionInfo");
       const sessionIdElement = this.shadowRoot?.getElementById("sessionId");
+      const cancelButton = this.shadowRoot?.getElementById("cancelButton");
       if (sessionInfoElement && sessionIdElement) {
         const sessionId = this.aiManager.getSessionId();
         if (sessionId) {
@@ -4138,6 +4202,13 @@
           sessionIdElement.title = sessionId;
         } else {
           sessionInfoElement.style.display = "none";
+        }
+        if (cancelButton) {
+          if (this.aiManager.isProcessing()) {
+            cancelButton.style.display = "inline-flex";
+          } else {
+            cancelButton.style.display = "none";
+          }
         }
       }
     }
