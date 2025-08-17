@@ -26,20 +26,16 @@ function setupRoutes(app: Express): void {
 
       res.setHeader('Content-Type', 'application/javascript')
 
-      if (req.query.autoInject !== undefined) {
-        const host = `${req.protocol}://${req.get('host')}`
-        const cwdArgument = req.query.cwd ? String(req.query.cwd) : ''
-        const cwd = cwdArgument || process.cwd()
-        const injectionCode = `
+      const host = `${req.protocol}://${req.get('host')}`
+      const cwdArgument = req.query.cwd ? String(req.query.cwd) : ''
+      const cwd = cwdArgument || process.cwd()
+      const injectionCode = `
 const toolbar = document.createElement('inspector-toolbar');
 toolbar.setAttribute('ai-endpoint', '${host}');
 toolbar.setAttribute('cwd', '${cwd}');
 document.body.prepend(toolbar);
 `
-        res.send(fileContent + injectionCode)
-      } else {
-        res.send(fileContent)
-      }
+      res.send(fileContent + injectionCode)
     } catch (error) {
       console.error('Error reading inspector-toolbar.js:', error)
       res.status(404).send('File not found')
