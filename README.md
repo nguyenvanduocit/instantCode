@@ -119,11 +119,8 @@ If port 7318 is already in use:
 PORT=8080 bun src/index.ts
 ```
 
-### Project Context
-For better AI assistance, specify your project directory:
-```html
-<script src="http://localhost:7318/inspector-toolbar.js?autoInject&cwd=/path/to/your/project"></script>
-```
+### Automatic Project Detection
+The server automatically detects your project directory from where it's running, so you don't need to specify any paths manually. The AI will have full context of your project structure automatically!
 
 ### Manual Integration
 For more control over when the toolbar appears:

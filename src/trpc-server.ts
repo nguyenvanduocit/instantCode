@@ -28,11 +28,12 @@ function setupRoutes(app: Express): void {
 
       if (req.query.autoInject !== undefined) {
         const host = `${req.protocol}://${req.get('host')}`
-        const cwd = req.query.cwd ? String(req.query.cwd) : ''
+        // Auto-detect current working directory where the server is running
+        const cwd = process.cwd()
         const injectionCode = `
 const toolbar = document.createElement('inspector-toolbar');
 toolbar.setAttribute('ai-endpoint', '${host}');
-${cwd ? `toolbar.setAttribute('cwd', '${cwd}');` : ''}
+toolbar.setAttribute('cwd', '${cwd}');
 document.body.prepend(toolbar);
 `
         res.send(fileContent + injectionCode)

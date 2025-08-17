@@ -96,15 +96,15 @@ The project uses Bun exclusively for both development and production, leveraging
 
 To integrate the inspector toolbar with a frontend application:
 ```html
-<!-- Auto-injection with optional project context -->
-<script src="http://localhost:7318/inspector-toolbar.js?autoInject&cwd=/path/to/project"></script>
+<!-- Auto-injection (automatically detects project directory) -->
+<script src="http://localhost:7318/inspector-toolbar.js?autoInject"></script>
 
 <!-- Manual integration -->
 <script src="http://localhost:7318/inspector-toolbar.js"></script>
 <script>
   const toolbar = document.createElement('inspector-toolbar');
   toolbar.setAttribute('ai-endpoint', 'http://localhost:7318');
-  toolbar.setAttribute('cwd', '/path/to/project');
+  toolbar.setAttribute('cwd', '/path/to/project'); // Optional: override auto-detected path
   document.body.prepend(toolbar);
 </script>
 ```
