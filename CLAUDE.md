@@ -89,25 +89,7 @@ The project uses Bun exclusively for both development and production, leveraging
 
 ## Environment Variables
 
-- **PORT**: Server port (default: 7318)
 - **NODE_ENV**: Environment mode (affects error handling and logging)
-
-## Integration Usage
-
-To integrate the inspector toolbar with a frontend application:
-```html
-<!-- Auto-injection (automatically detects project directory) -->
-<script src="http://localhost:7318/inspector-toolbar.js?autoInject"></script>
-
-<!-- Manual integration -->
-<script src="http://localhost:7318/inspector-toolbar.js"></script>
-<script>
-  const toolbar = document.createElement('inspector-toolbar');
-  toolbar.setAttribute('ai-endpoint', 'http://localhost:7318');
-  toolbar.setAttribute('cwd', '/path/to/project'); // Optional: override auto-detected path
-  document.body.prepend(toolbar);
-</script>
-```
 
 ## Key Development Notes
 
@@ -116,3 +98,53 @@ To integrate the inspector toolbar with a frontend application:
 - **Session management**: Claude Code sessions can be resumed using session IDs for continuous conversations
 - **Component detection**: Automatically extracts file locations from framework-specific DOM attributes
 - **Error handling**: Comprehensive error handling with graceful degradation and user feedback
+
+## Git Commit Guidelines
+
+This project follows **Conventional Commits** specification for commit messages. This provides a consistent commit history and enables automated tooling.
+
+### Commit Message Format
+```
+<type>(<scope>): <subject>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+### Commit Types
+- **feat**: New feature or functionality
+- **fix**: Bug fix
+- **docs**: Documentation changes only
+- **style**: Code style changes (formatting, semicolons, etc.)
+- **refactor**: Code changes that neither fix bugs nor add features
+- **perf**: Performance improvements
+- **test**: Adding or updating tests
+- **build**: Changes to build system or dependencies
+- **ci**: CI/CD configuration changes
+- **chore**: Maintenance tasks and other changes that don't modify src or test files
+
+### Examples
+```
+feat(inspector): add React component detection
+fix(server): handle WebSocket disconnection gracefully
+docs: update installation instructions in README
+refactor(trpc): simplify router configuration
+build: upgrade tRPC to v11.0.0
+```
+
+### Scope Guidelines
+Common scopes for this project:
+- **server**: Server-side changes (tRPC, Express)
+- **inspector**: Browser inspector toolbar component
+- **trpc**: tRPC router and configuration
+- **build**: Build system and configuration
+- **utils**: Utility functions and helpers
+
+### Breaking Changes
+Add `BREAKING CHANGE:` in the commit footer or append `!` after the type:
+```
+feat(server)!: change default port to 7318
+
+BREAKING CHANGE: Server now defaults to port 7318 instead of 3000
+```
