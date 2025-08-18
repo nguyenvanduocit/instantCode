@@ -28,7 +28,7 @@ bun install -g @anthropic-ai/claude-code
 
 After installation, verify it's working:
 ```bash
-claude-code --version
+claude --version
 ```
 
 For more installation options and troubleshooting, visit: https://docs.anthropic.com/en/docs/claude-code
@@ -44,7 +44,7 @@ For more installation options and troubleshooting, visit: https://docs.anthropic
 cd /path/to/your/project
 
 # Then run InstantCode - no installation needed!
-bunx instantcode
+bunx instantcode@latest
 ```
 
 This will:

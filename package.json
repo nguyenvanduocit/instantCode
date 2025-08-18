@@ -16,9 +16,7 @@
   },
   "files": [
     "dist/**/*",
-    "res/**/*",
-    "README.md",
-    "CLAUDE.md"
+    "README.md"
   ],
   "keywords": [
     "frontend",
