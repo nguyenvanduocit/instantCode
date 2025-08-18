@@ -27,12 +27,6 @@ const CONFIG = {
 } as const
 
 
-interface ToolCallState {
-  id: string
-  name: string
-  input?: any
-  status: 'pending' | 'completed' | 'error'
-}
 
 // CSS Styles organized by component
 
@@ -394,13 +388,13 @@ export const TOOLBAR_STYLES = `
     border: 1px solid #e5e7eb;
     border-radius: 6px;
     background: white;
-    max-height: 400px;
     width: 380px;
     display: none;
+    flex-direction: column;
   }
 
   .json-display.show {
-    display: block;
+    display: flex;
   }
 
   .json-header {
@@ -435,9 +429,8 @@ export const TOOLBAR_STYLES = `
   }
 
   .json-content {
-    max-height: 350px;
+    max-height: 400px;
     overflow: auto;
-    padding: 4px;
   }
 
   .json-message {
@@ -446,7 +439,6 @@ export const TOOLBAR_STYLES = `
     background: #fafbfc;
     border-left: 3px solid #e2e8f0;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    font-size: 11px;
     color: #1f2937;
     line-height: 1.4;
   }
@@ -471,6 +463,7 @@ export const TOOLBAR_STYLES = `
   .json-message.result {
     border-left-color: #8b5cf6;
     background: #faf5ff;
+    font-size: 14px;
   }
 
   .message-wrapper {
@@ -479,8 +472,8 @@ export const TOOLBAR_STYLES = `
 
   .message-badge {
     position: absolute;
-    top: -2px;
-    right: -2px;
+    top: -9px;
+    right: -7px;
     background: #4f46e5;
     color: white;
     font-size: 8px;
@@ -509,11 +502,16 @@ export const TOOLBAR_STYLES = `
     background: #8b5cf6;
   }
 
+  .json-message pre {
+    margin: 0;
+    overflow: auto;
+  }
+
   .message-content {
     white-space: pre-wrap;
     word-break: break-word;
     margin: 0;
-    padding-right: 20px;
+    font-size: 12px
   }
 
   .message-meta {
@@ -632,6 +630,42 @@ export const TOOLBAR_STYLES = `
     60% { content: '..'; }
     80%, 100% { content: '...'; }
   }
+
+  .processing-message {
+    margin-bottom: 3px;
+    padding: 8px 12px;
+    background: #fffbeb;
+    border-left: 3px solid #f59e0b;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 11px;
+    color: #92400e;
+    line-height: 1.4;
+    display: none;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .processing-message.show {
+    display: flex;
+  }
+
+  .processing-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid #fbbf24;
+    border-top: 2px solid #d97706;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
+  .processing-text {
+    font-weight: 500;
+  }
 `
 
 /**
@@ -678,11 +712,15 @@ ${TOOLBAR_STYLES}
       </div>
 
       <div class="processing-indicator" id="processingIndicator">
-        <div>🔄 Processing with Claude<span class="processing-dots"></span></div>
+        <div>Starting Claude Code<span class="processing-dots"></span></div>
       </div>
 
       <div class="json-display" id="jsonDisplay">
         <div class="json-content" id="jsonContent"></div>
+        <div class="processing-message" id="processingMessage">
+          <div class="processing-spinner"></div>
+          <span class="processing-text">Processing request...</span>
+        </div>
       </div>
     </div>
   `
@@ -698,8 +736,7 @@ ${TOOLBAR_STYLES}
 export interface MessageFormatter {
   formatPrompt(userPrompt: string, selectedElements: ElementData[], pageInfo: PageInfo): string
   shouldShowMessage(jsonData: any): boolean
-  createMessage(data: any): string | { html: string, toolCallId?: string } | null
-  updateMessage(toolCallId: string, result: any): string | null
+  createMessage(data: any): string | null
   clearMessages(): void
 }
 
@@ -710,7 +747,6 @@ export function createMessageFormatter(): MessageFormatter {
   // State management
   let lastMessageHash = ''
   let messageHistory = new Set<string>()
-  let pendingToolCalls = new Map<string, ToolCallState>()
 
   // ===================
   // 1. FORMAT USER INPUT
@@ -767,7 +803,7 @@ export function createMessageFormatter(): MessageFormatter {
   // ==================
   // 3. CREATE MESSAGE
   // ==================
-  function createMessage(data: any): string | { html: string, toolCallId?: string } | null {
+  function createMessage(data: any): string | null {
     try {
       // Handle different message types clearly
       if (data.type === 'assistant') {
@@ -789,90 +825,48 @@ export function createMessageFormatter(): MessageFormatter {
     }
   }
 
-  // ==================
-  // 4. UPDATE MESSAGE
-  // ==================
-  function updateMessage(toolCallId: string, result: any): string | null {
-    const toolCall = pendingToolCalls.get(toolCallId)
-    if (!toolCall) return null
-
-    pendingToolCalls.delete(toolCallId)
-    return formatToolComplete(toolCall, result)
-  }
-
   // =================
-  // 5. CLEAR MESSAGES
+  // 4. CLEAR MESSAGES
   // =================
   function clearMessages(): void {
     lastMessageHash = ''
     messageHistory.clear()
-    pendingToolCalls.clear()
   }
 
   // ===============================
   // HELPER FUNCTIONS - MESSAGE TYPES
   // ===============================
-  function createAssistantMessage(data: any): string | { html: string, toolCallId?: string } | null {
+  function createAssistantMessage(data: any): string | null {
     if (!data.message?.content) return null
 
     const extracted = extractContentFromAssistant(data.message.content)
-
-    // Handle tool calls - show as pending
-    if (extracted.toolCall) {
-      const toolCall = extracted.toolCall
-      pendingToolCalls.set(toolCall.id, {
-        id: toolCall.id,
-        name: toolCall.name,
-        input: toolCall.input,
-        status: 'pending'
-      })
-
-      return {
-        html: formatToolPending(toolCall),
-        toolCallId: toolCall.id
-      }
-    }
 
     // Regular assistant message - escape HTML for safety
     const meta = data.message?.usage ?
       `${data.message.usage.input_tokens || 0}↑ ${data.message.usage.output_tokens || 0}↓` : ''
 
-    return formatMessage(HtmlUtils.escapeHtml(extracted.text), extracted.badge, meta)
+    return formatMessage(extracted.text, extracted.badge, meta)
   }
 
-  function createUserMessage(data: any): string | { html: string, toolCallId?: string } | null {
+  function createUserMessage(data: any): string | null {
     if (!data.message?.content) return null
 
     const extracted = extractContentFromUser(data.message.content)
 
-    // Handle tool results - update existing message
-    if (extracted.toolResult) {
-      const toolCallId = extracted.toolResult.tool_use_id
-      if (pendingToolCalls.has(toolCallId)) {
-        const toolCall = pendingToolCalls.get(toolCallId)!
-        pendingToolCalls.delete(toolCallId)
-
-        return {
-          html: formatToolComplete(toolCall, extracted.toolResult),
-          toolCallId: toolCallId
-        }
-      }
-    }
-
     // Escape HTML for user messages
-    return formatMessage(HtmlUtils.escapeHtml(extracted.text), extracted.badge)
+    return formatMessage(extracted.text, extracted.badge)
   }
 
   function createSystemMessage(data: any): string {
     const content = `System: ${data.subtype || 'message'}`
     const meta = data.cwd ? data.cwd : ''
-    return formatMessage(HtmlUtils.escapeHtml(content), 'System', meta)
+    return formatMessage(content, 'System', meta)
   }
 
   function createResultMessage(data: any): string {
     const content = data.result || 'Task completed'
     const meta = data.duration_ms ? `${data.duration_ms}ms` : ''
-    return formatMessage(HtmlUtils.escapeHtml(content), 'Result', meta)
+    return formatMessage(content, 'Result', meta)
   }
 
   function createClaudeResponseMessage(response: any): string {
@@ -926,14 +920,14 @@ export function createMessageFormatter(): MessageFormatter {
 
     // Wrap JSON in a pre/code block for better formatting
     const formattedContent = typeof data === 'object'
-      ? `<pre style="background:#f5f5f5;padding:6px;border-radius:4px;overflow-x:auto;font-size:8px"><code>${HtmlUtils.escapeHtml(displayContent)}</code></pre>`
-      : HtmlUtils.escapeHtml(displayContent)
+      ? `<pre style="background:#f5f5f5;padding:6px;border-radius:4px;overflow-x:auto;font-size:8px"><code>${displayContent}</code></pre>`
+      : displayContent
 
     return formatMessage(formattedContent, 'Claude')
   }
 
   function createErrorMessage(data: any): string {
-    const errorContent = `<pre style="background:#fee;padding:6px;border-radius:4px;overflow-x:auto;font-size:8px"><code>${HtmlUtils.escapeHtml(JSON.stringify(data))}</code></pre>`
+    const errorContent = `<pre style="background:#fee;padding:6px;border-radius:4px;overflow-x:auto;font-size:8px"><code>${JSON.stringify(data)}</code></pre>`
     return formatMessage(errorContent, 'Error')
   }
 
@@ -941,57 +935,22 @@ export function createMessageFormatter(): MessageFormatter {
   // FORMATTING UTILITIES
   // ===============================
   function formatMessage(content: string, badge?: string, meta?: string): string {
-    const badgeHtml = badge ? `<div class="message-badge">${HtmlUtils.escapeHtml(badge)}</div>` : ''
+    const badgeHtml = badge ? `<div class="message-badge">${badge}</div>` : ''
     const metaHtml = meta ? `<div class="message-meta">${meta}</div>` : ''
     // Don't escape HTML in content since we're now using HTML formatting
     return `<div class="message-wrapper">${badgeHtml}<div class="message-content">${content}</div>${metaHtml}</div>`
   }
 
-  function formatToolPending(toolCall: any): string {
-    let content = `<strong>${HtmlUtils.escapeHtml(toolCall.name)}</strong>`
-    if (toolCall.input) {
-      const inputStr = JSON.stringify(toolCall.input, null, 2)
-      const truncatedInput = inputStr.length > CONFIG.MAX_CONTENT_LENGTH ? inputStr.substring(0, CONFIG.MAX_CONTENT_LENGTH) + '...' : inputStr
-      content += `<br><strong>Input:</strong><br><pre style="background:#f5f5f5;padding:6px;border-radius:4px;overflow-x:auto;font-size:8px"><code>${HtmlUtils.escapeHtml(truncatedInput)}</code></pre>`
-    }
-    content += `<br>Running...`
 
-    return formatMessage(content, 'Tool Running')
-  }
-
-  function formatToolComplete(toolCall: ToolCallState, result: any): string {
-    let content = `<strong>${HtmlUtils.escapeHtml(toolCall.name)}</strong>`
-
-    if (toolCall.input) {
-      const inputStr = JSON.stringify(toolCall.input, null, 2)
-      const truncatedInput = inputStr.length > CONFIG.MAX_CONTENT_LENGTH ? inputStr.substring(0, CONFIG.MAX_CONTENT_LENGTH) + '...' : inputStr
-      content += `<br><strong>Input:</strong><br><pre style="background:#f5f5f5;padding:6px;border-radius:4px;overflow-x:auto;font-size:8px"><code>${HtmlUtils.escapeHtml(truncatedInput)}</code></pre>`
-    }
-
-    // Add result
-    const resultContent = typeof result.content === 'string' ? result.content : JSON.stringify(result.content)
-    if (result.is_error) {
-      content += `<br><strong>Error:</strong> ${HtmlUtils.escapeHtml(resultContent || 'Unknown error')}`
-    } else if (resultContent && resultContent.trim()) {
-      const truncatedResult = resultContent.length > CONFIG.MAX_RESULT_LENGTH ? resultContent.substring(0, CONFIG.MAX_RESULT_LENGTH) + '...' : resultContent
-      content += `<strong>Output:</strong><br><pre style="background:#f5f5f5;padding:6px;border-radius:4px;overflow-x:auto;font-size:8px"><code>${HtmlUtils.escapeHtml(truncatedResult)}</code></pre>`
-    } else {
-      content += `<strong>Output:</strong><br>[done]`
-    }
-
-    const badge = result.is_error ? 'Tool Error' : 'Tool Complete'
-    return formatMessage(content, badge)
-  }
-
-  function extractContentFromAssistant(content: any[]): { text: string, badge?: string, toolCall?: any } {
+  function extractContentFromAssistant(content: any[]): { text: string, badge?: string } {
     const items = content.map(item => {
       if (item.type === 'text') {
         return { text: item.text, badge: undefined }
       } else if (item.type === 'tool_use') {
+        const toolContent = `${item.input ? ': ' + JSON.stringify(item.input) : ''}`
         return { 
-          text: `${item.name}${item.input ? ': ' + JSON.stringify(item.input).substring(0, 100) + '...' : ''}`,
-          badge: 'Edit',
-          toolCall: item
+          text: `<pre>${HtmlUtils.escapeHtml(toolContent)}</pre>`,
+          badge: item.name
         }
       }
       return { text: '', badge: undefined }
@@ -1003,35 +962,32 @@ export function createMessageFormatter(): MessageFormatter {
     if (toolUseItem) {
       return {
         text: items.map(item => item.text).join('\n'),
-        badge: toolUseItem.badge,
-        toolCall: toolUseItem.toolCall
+        badge: toolUseItem.badge
       }
     }
     
     return { text: items.map(item => item.text).join('\n') }
   }
 
-  function extractContentFromUser(content: any[]): { text: string, badge?: string, toolResult?: any } {
+  function extractContentFromUser(content: any[]): { text: string, badge?: string } {
     const items = content.map(item => {
       if (item.type === 'text') {
         return { text: item.text, badge: undefined }
       } else if (item.type === 'tool_result') {
         const result = typeof item.content === 'string' ? item.content : JSON.stringify(item.content)
         return { 
-          text: `${result.substring(0, CONFIG.MAX_INPUT_DISPLAY)}${result.length > CONFIG.MAX_INPUT_DISPLAY ? '...' : ''}`,
-          badge: 'Tool result',
-          toolResult: item
+          text: `<pre>${HtmlUtils.escapeHtml(result)}</pre>`,
+          badge: 'Tool Result'
         }
       }
       return { text: '', badge: undefined }
     })
     
-    const toolResultItem = items.find(item => item.toolResult)
+    const toolResultItem = items.find(item => item.badge)
     if (toolResultItem) {
       return {
         text: items.filter(item => item.text).map(item => item.text).join('\n'),
-        badge: toolResultItem.badge,
-        toolResult: toolResultItem.toolResult
+        badge: toolResultItem.badge
       }
     }
 
@@ -1059,7 +1015,6 @@ export function createMessageFormatter(): MessageFormatter {
     formatPrompt,
     shouldShowMessage,
     createMessage,
-    updateMessage,
     clearMessages
   }
 }
