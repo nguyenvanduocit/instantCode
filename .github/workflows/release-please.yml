@@ -44,7 +44,7 @@ jobs:
         run: bun install
         
       - name: Build project
-        run: bun run build:all
+        run: bun run build
         
       - name: Publish to npm
         run: |
