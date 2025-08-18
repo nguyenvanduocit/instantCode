@@ -12,8 +12,7 @@
     "build:inspector": "bun scripts/build-inspector.js",
     "build": "bun run build:server && bun run build:inspector",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "bun run build",
-    "release": "bun run build && npm publish"
+    "prepublishOnly": "bun run build"
   },
   "files": [
     "dist/**/*",
