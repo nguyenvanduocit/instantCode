@@ -424,10 +424,12 @@ export class InspectorToolbar extends HTMLElement {
             this.hideProcessingIndicator()
             this.displayJsonMessage(data.claudeJson)
           } else if (data.type === 'claude_response') {
-            this.hideProcessingIndicator()
+            this.hideProcessingMessage()
             this.displayJsonMessage(data.claudeResponse)
           } else if (data.type === 'complete') {
             if (promptInput) promptInput.value = ''
+            this.hideProcessingIndicator()
+            this.hideProcessingMessage()
             this.setProcessingState(false)
           }
           
@@ -484,41 +486,11 @@ export class InspectorToolbar extends HTMLElement {
     
     jsonDisplay.classList.add('show')
 
-    if (typeof formattedMessage === 'string') {
-      // Regular message
-      const messageElement = document.createElement('div')
-      messageElement.classList.add('json-message', jsonData.type || 'generic')
-      messageElement.innerHTML = formattedMessage
-
-      jsonContent.appendChild(messageElement)
-    } else {
-      // Tool call message (pending or update)
-      const { html, toolCallId } = formattedMessage
-
-      if (toolCallId) {
-        // Check if this is an update to existing tool call
-        const existingElement = jsonContent.querySelector(`[data-tool-call-id="${toolCallId}"]`)
-        if (existingElement) {
-          // Update existing element
-          existingElement.innerHTML = html
-        } else {
-          // Create new element for pending tool call
-          const messageElement = document.createElement('div')
-          messageElement.classList.add('json-message', jsonData.type || 'generic')
-          messageElement.setAttribute('data-tool-call-id', toolCallId)
-          messageElement.innerHTML = html
-
-          jsonContent.appendChild(messageElement)
-        }
-      } else {
-    // Fallback to regular message
-        const messageElement = document.createElement('div')
-        messageElement.classList.add('json-message', jsonData.type || 'generic')
-        messageElement.innerHTML = html
-
-        jsonContent.appendChild(messageElement)
-      }
-    }
+    // Create regular message element
+    const messageElement = document.createElement('div')
+    messageElement.classList.add('json-message', jsonData.type || 'generic')
+    messageElement.innerHTML = formattedMessage
+    jsonContent.appendChild(messageElement)
 
     jsonContent.scrollTop = jsonContent.scrollHeight
   }
@@ -540,16 +512,51 @@ export class InspectorToolbar extends HTMLElement {
 
   private setProcessingState(isProcessing: boolean): void {
     if (isProcessing) {
+      this.showProcessingIndicator()
       this.events.emit('ui:processing-start', undefined)
+      window.onbeforeunload = () => 'Processing in progress. Are you sure you want to leave?'
     } else {
       this.events.emit('ui:processing-end', undefined)
+      window.onbeforeunload = null
+    }
+  }
+
+  private showProcessingIndicator(): void {
+    const processingIndicator = this.shadowRoot?.getElementById('processingIndicator')
+    const processingMessage = this.shadowRoot?.getElementById('processingMessage')
+    const jsonDisplay = this.shadowRoot?.getElementById('jsonDisplay')
+
+    if (processingIndicator) {
+      processingIndicator.style.display = 'block'
+    }
+
+    // Show processing message at the end of message list
+    if (processingMessage && jsonDisplay) {
+      processingMessage.classList.add('show')
+      jsonDisplay.classList.add('show')
+
+      // Scroll to bottom to show the processing indicator
+      const jsonContent = this.shadowRoot?.getElementById('jsonContent')
+      if (jsonContent) {
+        jsonContent.scrollTop = jsonContent.scrollHeight
+      }
     }
   }
 
   private hideProcessingIndicator(): void {
     const processingIndicator = this.shadowRoot?.getElementById('processingIndicator')
+
     if (processingIndicator) {
       processingIndicator.style.display = 'none'
+    }
+  }
+
+  private hideProcessingMessage(): void {
+    const processingMessage = this.shadowRoot?.getElementById('processingMessage')
+
+    // Hide processing message from message list
+    if (processingMessage) {
+      processingMessage.classList.remove('show')
     }
   }
 
@@ -563,6 +570,8 @@ export class InspectorToolbar extends HTMLElement {
   }
 
   disconnectedCallback(): void {
+    window.onbeforeunload = null
+
     this.aiManager.destroy()
     this.inspectionManager.destroy()
     this.selectionManager.clearAllSelections()

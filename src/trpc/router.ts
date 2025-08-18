@@ -122,6 +122,7 @@ export const appRouter = router({
             currentSessionId = message.session_id
           }
 
+
           // Stream all Claude Code messages as JSON to the toolbar
           const claudeMsg = {
             type: 'claude_json',
@@ -159,6 +160,7 @@ export const appRouter = router({
           }
         }
 
+
         const completeMsg = {
           type: 'complete',
           message: 'Message processed successfully',
@@ -187,6 +189,7 @@ export const appRouter = router({
           console.log(`📤 [SERVER ${subscriptionId}] Sent cancellation messages`)
         } else {
           console.error(`❌ [SERVER ${subscriptionId}] Claude processing error:`, error)
+          
           yield {
             type: 'progress',
             message: 'Error processing with Claude: ' + (error as Error).message,
