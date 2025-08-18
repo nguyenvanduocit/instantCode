@@ -511,7 +511,11 @@ export const TOOLBAR_STYLES = `
     white-space: pre-wrap;
     word-break: break-word;
     margin: 0;
-    font-size: 12px
+    font-size: 10px
+  }
+
+  .result .message-content {
+    font-size: 13px;
   }
 
   .message-meta {
@@ -865,8 +869,7 @@ export function createMessageFormatter(): MessageFormatter {
 
   function createResultMessage(data: any): string {
     const content = data.result || 'Task completed'
-    const meta = data.duration_ms ? `${data.duration_ms}ms` : ''
-    return formatMessage(content, 'Result', meta)
+    return formatMessage(content, 'Result')
   }
 
   function createClaudeResponseMessage(response: any): string {
@@ -942,15 +945,66 @@ export function createMessageFormatter(): MessageFormatter {
   }
 
 
+  /**
+   * Formats TodoWrite tool input into a user-friendly todo list display
+   */
+  function formatTodoList(input: any): string {
+    if (!input || !input.todos || !Array.isArray(input.todos)) {
+      return '<div>No todos found</div>'
+    }
+
+    const todos = input.todos
+    let html = '<div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; margin: 4px 0;">'
+    html += '<div style="font-weight: 600; color: #374151; margin-bottom: 6px; font-size: 12px;">📝 Todo List</div>'
+
+    todos.forEach((todo: any) => {
+      const status = todo.status || 'pending'
+      let statusIcon = '⚪'
+      let statusColor = '#6b7280'
+
+      switch (status) {
+        case 'completed':
+          statusIcon = '✅'
+          statusColor = '#059669'
+          break
+        case 'in_progress':
+          statusIcon = '🔄'
+          statusColor = '#dc2626'
+          break
+        case 'pending':
+          statusIcon = '⚪'
+          statusColor = '#6b7280'
+          break
+      }
+
+      html += `<div style="display: flex; align-items: flex-start; gap: 8px; padding: 4px 0; border-bottom: 1px solid #f3f4f6; font-size: 11px;">`
+      html += `<span style="color: ${statusColor}; flex-shrink: 0;">${statusIcon}</span>`
+      html += `<span style="color: #374151; line-height: 1.4;">${HtmlUtils.escapeHtml(todo.content || '')}</span>`
+      html += `</div>`
+    })
+
+    html += '</div>'
+    return html
+  }
+
   function extractContentFromAssistant(content: any[]): { text: string, badge?: string } {
     const items = content.map(item => {
       if (item.type === 'text') {
         return { text: item.text, badge: undefined }
       } else if (item.type === 'tool_use') {
-        const toolContent = `${item.input ? ': ' + JSON.stringify(item.input) : ''}`
-        return { 
-          text: `<pre>${HtmlUtils.escapeHtml(toolContent)}</pre>`,
-          badge: item.name
+        // Special handling for TodoWrite tool
+        if (item.name === 'TodoWrite') {
+          const todoContent = formatTodoList(item.input)
+          return {
+            text: todoContent,
+            badge: item.name
+          }
+        } else {
+          const toolContent = `${item.input ? JSON.stringify(item.input, null, 2) : ''}`
+          return {
+            text: `<pre>${HtmlUtils.escapeHtml(toolContent)}</pre>`,
+            badge: item.name
+          }
         }
       }
       return { text: '', badge: undefined }
