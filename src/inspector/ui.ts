@@ -11,6 +11,7 @@
 
 import { HtmlUtils } from '../utils/html'
 import type { ElementData, PageInfo } from '../shared/types'
+import * as yaml from 'js-yaml'
 
 // Configuration constants
 const CONFIG = {
@@ -224,6 +225,7 @@ export const TOOLBAR_STYLES = `
     min-width: 60px;
     text-align: center;
   }
+
 
   .toolbar-actions {
     display: flex;
@@ -731,6 +733,208 @@ ${TOOLBAR_STYLES}
 }
 
 // ===============================
+// UI STATE UPDATE FUNCTIONS
+// ===============================
+
+/**
+ * Update the expanded/collapsed state of the toolbar
+ */
+export function updateExpandedState(shadowRoot: ShadowRoot | null, isExpanded: boolean): void {
+  const toolbarCard = shadowRoot?.getElementById('toolbarCard')
+  const toggleButton = shadowRoot?.getElementById('toggleButton')
+
+  if (isExpanded) {
+    toolbarCard?.classList.add('expanded')
+    toggleButton?.classList.add('active')
+  } else {
+    toolbarCard?.classList.remove('expanded')
+    toggleButton?.classList.remove('active')
+  }
+}
+
+/**
+ * Update the inspection mode visual state
+ */
+export function updateInspectionState(shadowRoot: ShadowRoot | null, isInspecting: boolean): void {
+  const toolbarCard = shadowRoot?.querySelector('.toolbar-card')
+
+  if (isInspecting) {
+    toolbarCard?.classList.add('inspecting')
+  } else {
+    toolbarCard?.classList.remove('inspecting')
+  }
+}
+
+/**
+ * Update the processing state visual feedback
+ */
+export function updateProcessingState(shadowRoot: ShadowRoot | null, isProcessing: boolean): void {
+  const toolbarCard = shadowRoot?.getElementById('toolbarCard')
+
+  if (isProcessing) {
+    toolbarCard?.classList.add('processing')
+  } else {
+    toolbarCard?.classList.remove('processing')
+  }
+}
+
+/**
+ * Update session display with current session ID
+ */
+export function updateSessionDisplay(shadowRoot: ShadowRoot | null, sessionId?: string | null, isProcessing?: boolean): void {
+  const sessionInfoElement = shadowRoot?.getElementById('sessionInfo')
+  const sessionIdElement = shadowRoot?.getElementById('sessionId')
+  const cancelButton = shadowRoot?.getElementById('cancelButton')
+
+  if (sessionInfoElement && sessionIdElement) {
+    if (sessionId) {
+      sessionInfoElement.style.display = 'flex'
+      sessionIdElement.textContent = sessionId.substring(0, 8)
+      sessionIdElement.title = sessionId
+    } else {
+      sessionInfoElement.style.display = 'none'
+    }
+
+    // Show/hide cancel button based on processing state
+    if (cancelButton) {
+      if (isProcessing) {
+        cancelButton.style.display = 'inline-flex'
+      } else {
+        cancelButton.style.display = 'none'
+      }
+    }
+  }
+}
+
+
+/**
+ * Update clear button visibility based on selection state
+ */
+export function updateClearButtonVisibility(shadowRoot: ShadowRoot | null, hasSelectedElements: boolean): void {
+  const clearElementButton = shadowRoot?.getElementById('clearElementButton')
+  if (clearElementButton) {
+    clearElementButton.style.display = hasSelectedElements ? 'inline-flex' : 'none'
+  }
+}
+
+/**
+ * Clear the prompt input field
+ */
+export function clearPromptInput(shadowRoot: ShadowRoot | null): void {
+  const promptInput = shadowRoot?.getElementById('promptInput') as HTMLTextAreaElement
+  if (promptInput) promptInput.value = ''
+}
+
+// ===============================
+// NOTIFICATION FUNCTIONS
+// ===============================
+
+/**
+ * Show notification (currently just logs to console)
+ */
+export function showNotification(message: string, type: 'success' | 'error' | 'info'): void {
+  console.log(`${type}: ${message}`)
+}
+
+// ===============================
+// PROCESSING INDICATOR FUNCTIONS
+// ===============================
+
+/**
+ * Show processing indicator
+ */
+export function showProcessingIndicator(shadowRoot: ShadowRoot | null): void {
+  const processingIndicator = shadowRoot?.getElementById('processingIndicator')
+  const processingMessage = shadowRoot?.getElementById('processingMessage')
+  const jsonDisplay = shadowRoot?.getElementById('jsonDisplay')
+
+  if (processingIndicator) {
+    processingIndicator.style.display = 'block'
+  }
+
+  // Show processing message at the end of message list
+  if (processingMessage && jsonDisplay) {
+    processingMessage.classList.add('show')
+    jsonDisplay.classList.add('show')
+
+    // Scroll to bottom to show the processing indicator
+    const jsonContent = shadowRoot?.getElementById('jsonContent')
+    if (jsonContent) {
+      jsonContent.scrollTop = jsonContent.scrollHeight
+    }
+  }
+}
+
+/**
+ * Hide processing indicator
+ */
+export function hideProcessingIndicator(shadowRoot: ShadowRoot | null): void {
+  const processingIndicator = shadowRoot?.getElementById('processingIndicator')
+
+  if (processingIndicator) {
+    processingIndicator.style.display = 'none'
+  }
+}
+
+/**
+ * Hide processing message
+ */
+export function hideProcessingMessage(shadowRoot: ShadowRoot | null): void {
+  const processingMessage = shadowRoot?.getElementById('processingMessage')
+
+  // Hide processing message from message list
+  if (processingMessage) {
+    processingMessage.classList.remove('show')
+  }
+}
+
+// ===============================
+// JSON DISPLAY FUNCTIONS
+// ===============================
+
+/**
+ * Display JSON message in the message area
+ */
+export function displayJsonMessage(shadowRoot: ShadowRoot | null, jsonData: any, messageFormatter: MessageFormatter): void {
+  const jsonDisplay = shadowRoot?.getElementById('jsonDisplay')
+  const jsonContent = shadowRoot?.getElementById('jsonContent')
+
+  if (!jsonDisplay || !jsonContent) return
+
+  if (!messageFormatter.shouldShowMessage(jsonData)) {
+    return
+  }
+
+  const formattedMessage = messageFormatter.createMessage(jsonData)
+  if (!formattedMessage) {
+    return
+  }
+  
+  jsonDisplay.classList.add('show')
+
+  // Create regular message element
+  const messageElement = document.createElement('div')
+  messageElement.classList.add('json-message', jsonData.type || 'generic')
+  messageElement.innerHTML = formattedMessage
+  jsonContent.appendChild(messageElement)
+
+  jsonContent.scrollTop = jsonContent.scrollHeight
+}
+
+/**
+ * Clear JSON display area
+ */
+export function clearJsonDisplay(shadowRoot: ShadowRoot | null): void {
+  const jsonDisplay = shadowRoot?.getElementById('jsonDisplay')
+  const jsonContent = shadowRoot?.getElementById('jsonContent')
+
+  if (!jsonDisplay || !jsonContent) return
+
+  jsonContent.innerHTML = ''
+  jsonDisplay.classList.remove('show')
+}
+
+// ===============================
 // MESSAGE OPERATIONS - CLEAR FLOW
 // ===============================
 
@@ -1000,7 +1204,7 @@ export function createMessageFormatter(): MessageFormatter {
             badge: item.name
           }
         } else {
-          const toolContent = `${item.input ? JSON.stringify(item.input, null, 2) : ''}`
+          const toolContent = `${item.input ? yaml.dump(item.input, { indent: 2 }) : ''}`
           return {
             text: `<pre>${HtmlUtils.escapeHtml(toolContent)}</pre>`,
             badge: item.name
