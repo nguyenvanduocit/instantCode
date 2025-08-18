@@ -60,14 +60,6 @@ Add this simple script tag to you index.html:
 <script src="http://localhost:7318/inspector-toolbar.js"></script>
 ```
 
-if you are using vite, you can check for env, so that the script can auto removed when buld production:
-
-```ts
-if (!import.meta.env.PROD) {
-  document.querySelector('script[src="http://localhost:7318/inspector-toolbar.js"]')?.remove()
-}
-```
-
 That's it! The toolbar will automatically appear on your page.
 
 ### Step 3: Start Inspecting!
