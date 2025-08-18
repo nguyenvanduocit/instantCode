@@ -9,7 +9,7 @@ import { createInspectionManager, type InspectionManager } from './inspector/ins
 import { createToolbarStateManager, type ToolbarStateManager } from './inspector/state'
 import { findNearestComponent } from './inspector/detectors'
 import { renderToolbar, createMessageFormatter, type MessageFormatter } from './inspector/ui'
-import { createToolbarEventEmitter, type ToolbarEventEmitter } from './inspector/events'
+import { createToolbarEventEmitter } from './inspector/events'
 
 export class InspectorToolbar extends HTMLElement {
   // Event-driven architecture

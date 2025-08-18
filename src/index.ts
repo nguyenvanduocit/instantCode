@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { startServer, stopServer } from './trpc-server'
+import { execSync } from 'child_process'
 
 interface ServerInstance {
   app: any
@@ -10,6 +11,7 @@ interface ServerInstance {
 }
 
 let serverInstance: ServerInstance | null = null
+let isShuttingDown = false
 
 // CLI argument parsing
 const args = process.argv.slice(2)
@@ -40,7 +42,7 @@ Examples:
 Getting Started:
   1. Run this command to start the server
   2. Add this script tag to your webpage:
-     <script src="http://localhost:7318/inspector-toolbar.js?autoInject"></script>
+     <script src="http://localhost:7318/inspector-toolbar.js"></script>
   3. Refresh your page and start inspecting elements!
 
 Learn more: https://github.com/nguyenvanduocit/instantCode
@@ -54,7 +56,7 @@ if (versionFlag) {
 }
 
 // Parse port
-let port = process.env.PORT ? parseInt(process.env.PORT, 10) : 7318
+let port = 7318
 if (portFlag !== -1 && args[portFlag + 1]) {
   const parsedPort = parseInt(args[portFlag + 1], 10)
   if (!isNaN(parsedPort) && parsedPort > 0 && parsedPort < 65536) {
@@ -65,20 +67,44 @@ if (portFlag !== -1 && args[portFlag + 1]) {
   }
 }
 
+function checkClaudeCodeInstallation(): boolean {
+  try {
+    execSync('claude --version', { stdio: 'pipe' })
+    return true
+  } catch (error) {
+    return false
+  }
+}
+
+function showClaudeCodeInstallationInstructions(): void {
+  console.log('')
+  console.log('❌ Claude Code is not installed or not available in PATH')
+  console.log('')
+  console.log('🔧 Installation Instructions:')
+  console.log('')
+  console.log('Option 2 - Install globally with Bun:')
+  console.log('  bun install -g @anthropic-ai/claude-code')
+  console.log('')
+  console.log('After installation, verify with:')
+  console.log('  claude --version')
+  console.log('')
+  console.log('📚 For more installation options and troubleshooting:')
+  console.log('  https://docs.anthropic.com/en/docs/claude-code')
+  console.log('')
+}
+
 async function main() {
   try {
-    console.log('🚀 Starting InstantCode server...')
-    console.log(`📡 Server will run on port ${port}`)
-    console.log('💡 Add this to your webpage to get started:')
-    console.log(`   <script src="http://localhost:${port}/inspector-toolbar.js?autoInject"></script>`)
-    console.log('')
+    // Check if Claude Code is installed
+    if (!checkClaudeCodeInstallation()) {
+      showClaudeCodeInstallationInstructions()
+      process.exit(1)
+    }
 
     serverInstance = await startServer(port)
-    console.log(`✅ InstantCode server running on port ${port}`)
-    console.log(`🌐 Ready to assist with your frontend development!`)
-    console.log(`🔗 Visit any webpage with the script tag to start inspecting`)
-    console.log('')
-    console.log('Press Ctrl+C to stop the server')
+    console.log(`✅ Server running on http://localhost:${port}`)
+    console.log(`📋 Add to your webpage: <script src="http://localhost:${port}/inspector-toolbar.js"></script>`)
+    console.log(`⏹️  Ctrl+C to stop`)
   } catch (error: any) {
     console.error('❌ Failed to start server:', error.message)
     process.exit(1)
@@ -86,7 +112,12 @@ async function main() {
 }
 
 // Handle graceful shutdown
-process.on('SIGINT', async () => {
+async function gracefulShutdown() {
+  if (isShuttingDown) {
+    return
+  }
+  isShuttingDown = true
+  
   console.log('\n\nShutting down server...')
   if (serverInstance) {
     try {
@@ -97,14 +128,10 @@ process.on('SIGINT', async () => {
     }
   }
   process.exit(0)
-})
+}
 
-process.on('SIGTERM', async () => {
-  if (serverInstance) {
-    await stopServer(serverInstance)
-  }
-  process.exit(0)
-})
+process.on('SIGINT', gracefulShutdown)
+process.on('SIGTERM', gracefulShutdown)
 
 // Start the server
 main().catch((error) => {

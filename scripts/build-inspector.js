@@ -1,9 +1,13 @@
 const esbuild = require('esbuild')
+const path = require('path')
+const fs = require('fs')
+
+const rootDir = path.join(__dirname, '..')
 
 esbuild.build({
-  entryPoints: ['src/inspector-toolbar.ts'],
+  entryPoints: [path.join(rootDir, 'src/inspector-toolbar.ts')],
   bundle: true,
-  outfile: 'res/inspector-toolbar.js',
+  outfile: path.join(rootDir, 'dist/inspector-toolbar.js'),
   platform: 'browser',
   target: 'es2020',
   format: 'iife',

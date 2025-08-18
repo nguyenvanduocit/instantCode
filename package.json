@@ -7,14 +7,13 @@
     "instantcode": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
-    "build:inspector": "node build-inspector.js",
-    "build:all": "npm run build && npm run build:inspector",
     "dev": "bun src/index.ts",
-    "start": "node dist/index.js",
-    "clean": "rm -rf dist",
+    "build:server": "bun scripts/build-server.js",
+    "build:inspector": "bun scripts/build-inspector.js",
+    "build": "bun run build:server && bun run build:inspector",
     "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run clean && npm run build:all"
+    "prepublishOnly": "bun run build",
+    "release": "bun run build && npm publish"
   },
   "files": [
     "dist/**/*",

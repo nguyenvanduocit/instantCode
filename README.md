@@ -13,126 +13,73 @@ Frontend Context is a browser inspection tool that brings AI directly to your we
 - 💬 **Natural Language**: Ask questions in plain English about your code
 - ⚡ **Real-time**: Get responses instantly without leaving your browser
 
-## Quick Start Tutorial
+## Prerequisites
 
-### Step 1: Run InstantCode
+Before using Frontend Context, you need to have **Claude Code** installed on your machine.
 
-The easiest way to get started is using `bunx` (no installation needed!):
+### Install Claude Code
+
+Frontend Context requires Claude Code to provide AI assistance. Install it using one of these methods:
+
+**Using bun (recommended)**
+```bash
+bun install -g @anthropic-ai/claude-code
+```
+
+After installation, verify it's working:
+```bash
+claude-code --version
+```
+
+For more installation options and troubleshooting, visit: https://docs.anthropic.com/en/docs/claude-code
+
+## Getting Started
+
+### Step 1: Navigate to Your Project Directory
+
+**Important**: Run InstantCode from your project's working directory to automatically provide AI context about your codebase.
 
 ```bash
-bunx github:nguyenvanduocit/instantCode
+# Navigate to your project folder first
+cd /path/to/your/project
+
+# Then run InstantCode - no installation needed!
+bunx instantcode
 ```
 
-**Alternative options:**
-
-```bash
-# With npm
-npx instantcode
-
-# Or install globally first
-npm install -g instantcode
-instantcode
-
-# For local development
-git clone https://github.com/nguyenvanduocit/instantCode.git
-cd instantCode
-bun install
-bun src/index.ts
-```
-
-You should see a message like:
-```
-🚀 Starting InstantCode server...
-📡 Server will run on port 7318
-💡 Add this to your webpage to get started:
-   <script src="http://localhost:7318/inspector-toolbar.js?autoInject"></script>
-
-✅ InstantCode server running on port 7318
-🌐 Ready to assist with your frontend development!
-```
+This will:
+- Start the server on port 7318
+- Display setup instructions
+- Automatically detect your project structure and provide better AI assistance
 
 ### Step 2: Add to Your Website
 
-Add this single line to any webpage you want to inspect:
+Add this simple script tag to you index.html:
 
 ```html
-<script src="http://localhost:7318/inspector-toolbar.js?autoInject"></script>
+<script src="http://localhost:7318/inspector-toolbar.js"></script>
 ```
 
-**For local development**, add it to your HTML file:
-```html
-<!DOCTYPE html>
-<html>
-<head>
-    <title>My Website</title>
-</head>
-<body>
-    <!-- Your content here -->
-    
-    <!-- Add this line at the end of your body -->
-    <script src="http://localhost:7318/inspector-toolbar.js?autoInject"></script>
-</body>
-</html>
+if you are using vite, you can check for env, so that the script can auto removed when buld production:
+
+```ts
+if (!import.meta.env.PROD) {
+  document.querySelector('script[src="http://localhost:7318/inspector-toolbar.js"]')?.remove()
+}
 ```
 
-**For React/Vue/Angular projects**, add it to your main HTML file (usually `public/index.html` or `index.html`).
+That's it! The toolbar will automatically appear on your page.
 
 ### Step 3: Start Inspecting!
 
 1. **Refresh your webpage** - you'll see a small toolbar appear
-2. **Click the "Select Element" button** in the toolbar
-3. **Hover over any element** on your page - it will highlight in blue
-4. **Click on an element** you want to learn about
-5. **Ask questions** like:
+2. **Click the "Select Element" button** 
+3. **Click on any element** you want to learn about
+4. **Ask questions** like:
    - "What does this button do?"
-   - "How can I change the color of this text?"
-   - "Why isn't this element centered?"
+   - "How can I change the color?"
+   - "Why isn't this centered?"
    - "How do I make this responsive?"
-
-## Common Use Cases
-
-### 🎓 **Learning Web Development**
-- Select elements to understand HTML structure
-- Ask about CSS properties and how they work
-- Learn about JavaScript event handlers
-
-### 🐛 **Debugging Issues**
-- Click on broken elements to get fixing suggestions
-- Ask "Why isn't this working?" about specific components
-- Get help with CSS layout problems
-
-### 🔧 **Building Features**
-- Select similar elements to understand patterns
-- Ask how to modify or extend existing components
-- Get code suggestions for improvements
-
-### 👥 **Team Collaboration**
-- Quickly understand code written by others
-- Get explanations of complex components
-- Ask about best practices for specific elements
-
-## Advanced Setup
-
-### Custom Port
-If port 7318 is already in use:
-```bash
-PORT=8080 bun src/index.ts
-```
-
-### Automatic Project Detection
-The server automatically detects your project directory from where it's running, so you don't need to specify any paths manually. The AI will have full context of your project structure automatically!
-
-### Manual Integration
-For more control over when the toolbar appears:
-```html
-<script src="http://localhost:7318/inspector-toolbar.js"></script>
-<script>
-  // Add toolbar when needed
-  const toolbar = document.createElement('inspector-toolbar');
-  toolbar.setAttribute('ai-endpoint', 'http://localhost:7318');
-  document.body.prepend(toolbar);
-</script>
-```
 
 ## Troubleshooting
 
@@ -145,20 +92,19 @@ For more control over when the toolbar appears:
 ### Server Won't Start?
 1. Make sure port 7318 isn't already in use
 2. Check that you have Bun installed: `bun --version`
-3. Try a different port: `PORT=8080 bun src/index.ts`
+3. Try a different port: `PORT=8080 bunx instantcode`
 
 ### Not Getting Good AI Responses?
-1. Try being more specific in your questions
-2. Make sure you're selecting the right element
-3. Add the `cwd` parameter to provide project context
+1. **Make sure you ran `bunx instantcode` from your project directory** - this is crucial for AI context
+2. Try being more specific in your questions
+3. Make sure you're selecting the right element
 
-## What's Next?
+## Tips for Better Results
 
-Once you're comfortable with the basics:
-- Try asking complex questions about your code architecture
-- Use it to learn new CSS techniques
-- Get suggestions for accessibility improvements
-- Ask for performance optimization tips
+- **Always run from your project directory** for better AI context
+- Ask specific questions about what you want to achieve
+- Select the exact element you're curious about
+- Try questions like "How do I..." or "Why does this..."
 
 ## Support
 

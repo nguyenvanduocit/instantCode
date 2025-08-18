@@ -909,13 +909,7 @@ export function createMessageFormatter(): MessageFormatter {
     if (response.num_turns) {
       content += `<strong>Turns:</strong> ${response.num_turns}<br>`
     }
-
-    // Build metadata string for the message badge area
-    const metaParts = []
-    if (response.duration_ms) metaParts.push(`${response.duration_ms}ms`)
-    if (response.total_cost_usd) metaParts.push(`$${response.total_cost_usd.toFixed(4)}`)
-
-    return formatMessage(content, 'Claude Complete', metaParts.join(' • '))
+    return formatMessage(content, 'Claude Complete', "")
   }
 
   function createFallbackMessage(data: any): string {

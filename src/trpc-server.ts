@@ -21,7 +21,12 @@ interface ServerInstance {
 function setupRoutes(app: Express): void {
   app.get('/inspector-toolbar.js', (req, res) => {
     try {
-      const filePath = path.join(__dirname, '..', 'res', 'inspector-toolbar.js')
+      // In production, the inspector-toolbar.js should be in the same folder as the built server
+      const isProduction = process.env.NODE_ENV === 'production'
+      const filePath = isProduction
+        ? path.join(__dirname, 'inspector-toolbar.js')  // Same folder as built server (dist/)
+        : path.join(__dirname, '..', 'dist', 'inspector-toolbar.js')  // Development: use res/ folder
+
       const fileContent = fs.readFileSync(filePath, 'utf8')
 
       res.setHeader('Content-Type', 'application/javascript')
@@ -71,7 +76,7 @@ export async function startServer(port: number): Promise<ServerInstance> {
     path: '/trpc',
   })
   
-  const handler = applyWSSHandler({
+  applyWSSHandler({
     wss,
     router: appRouter,
     createContext: createWSSContext,
@@ -85,25 +90,44 @@ export async function startServer(port: number): Promise<ServerInstance> {
     })
   })
   
-  process.on('SIGTERM', () => {
-    handler.broadcastReconnectNotification()
-    wss.close()
-  })
   
   return { app, server, wss, port }
 }
 
 export async function stopServer(serverInstance: ServerInstance): Promise<void> {
   return new Promise((resolve, reject) => {
-    serverInstance.wss.close((err) => {
-      if (err) console.error('Error closing WebSocket server:', err)
+    let wssComplete = false
+    let serverComplete = false
+    let rejected = false
+    
+    function checkCompletion() {
+      if (wssComplete && serverComplete && !rejected) {
+        resolve()
+      }
+    }
+    
+    // First, terminate all active WebSocket connections
+    serverInstance.wss.clients.forEach((ws) => {
+      ws.terminate()
     })
     
+    // Close WebSocket server
+    serverInstance.wss.close((err) => {
+      if (err && !rejected) {
+        console.error('Error closing WebSocket server:', err)
+      }
+      wssComplete = true
+      checkCompletion()
+    })
+    
+    // Close HTTP server
     serverInstance.server.close((error) => {
-      if (error) {
+      if (error && !rejected) {
+        rejected = true
         reject(error)
       } else {
-        resolve()
+        serverComplete = true
+        checkCompletion()
       }
     })
   })
