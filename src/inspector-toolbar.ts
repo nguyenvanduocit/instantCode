@@ -8,7 +8,23 @@ import { createElementSelectionManager, type ElementSelectionManager } from './i
 import { createInspectionManager, type InspectionManager } from './inspector/inspection'
 import { createToolbarStateManager, type ToolbarStateManager } from './inspector/state'
 import { findNearestComponent } from './inspector/detectors'
-import { renderToolbar, createMessageFormatter, type MessageFormatter } from './inspector/ui'
+import { 
+  renderToolbar, 
+  createMessageFormatter, 
+  type MessageFormatter,
+  updateExpandedState,
+  updateInspectionState,
+  updateProcessingState,
+  updateSessionDisplay,
+  updateClearButtonVisibility,
+  clearPromptInput,
+  showNotification,
+  showProcessingIndicator,
+  hideProcessingIndicator,
+  hideProcessingMessage,
+  displayJsonMessage,
+  clearJsonDisplay
+} from './inspector/ui'
 import { createToolbarEventEmitter } from './inspector/events'
 
 export class InspectorToolbar extends HTMLElement {
@@ -21,6 +37,7 @@ export class InspectorToolbar extends HTMLElement {
   private aiManager: AIManager
   private inspectionManager: InspectionManager
   private messageFormatter: MessageFormatter
+
 
   // Event cleanup functions
   private cleanupFunctions: (() => void)[] = []
@@ -74,125 +91,58 @@ export class InspectorToolbar extends HTMLElement {
     this.shadowRoot.innerHTML = renderToolbar()
 
     // Set initial clear button visibility
-    this.updateClearButtonVisibility()
+    updateClearButtonVisibility(this.shadowRoot, false)
   }
 
   private setupEventListeners(): void {
     // Listen to state changes and update UI accordingly
     this.cleanupFunctions.push(
-      this.events.on('ui:expand', () => this.updateExpandedState(true)),
-      this.events.on('ui:collapse', () => this.updateExpandedState(false)),
+      this.events.on('ui:expand', () => updateExpandedState(this.shadowRoot, true)),
+      this.events.on('ui:collapse', () => updateExpandedState(this.shadowRoot, false)),
       this.events.on('ui:enter-inspection', () => {
         this.enterInspectionMode()
-        this.updateInspectionState(true)
+        updateInspectionState(this.shadowRoot, true)
       }),
       this.events.on('ui:exit-inspection', () => {
         this.exitInspectionMode() 
-        this.updateInspectionState(false)
+        updateInspectionState(this.shadowRoot, false)
       }),
-      this.events.on('ui:processing-start', () => this.updateProcessingState(true)),
-      this.events.on('ui:processing-end', () => this.updateProcessingState(false)),
-      this.events.on('session:updated', ({ sessionId }) => this.updateSessionDisplay(sessionId)),
+      this.events.on('ui:processing-start', () => updateProcessingState(this.shadowRoot, true)),
+      this.events.on('ui:processing-end', () => updateProcessingState(this.shadowRoot, false)),
+      this.events.on('session:updated', ({ sessionId }) => updateSessionDisplay(this.shadowRoot, sessionId, this.stateManager.isProcessing())),
       this.events.on('selection:changed', () => this.updateSelectionDisplay()),
       this.events.on('messages:add', (message) => this.displayMessage(message)),
       this.events.on('messages:clear', () => this.clearMessagesDisplay()),
-      this.events.on('prompt:clear', () => this.clearPromptInput()),
+      this.events.on('prompt:clear', () => clearPromptInput(this.shadowRoot)),
       this.events.on('selection:clear', () => {
         this.selectionManager.clearAllSelections()
-        this.updateClearButtonVisibility()
+        updateClearButtonVisibility(this.shadowRoot, false)
       }),
       this.events.on('notification:show', ({ message, type }) => {
         if (type === 'info') {
-          this.showNotification(message, 'success') // Map info to success for now
+          showNotification(message, 'success') // Map info to success for now
         } else {
-          this.showNotification(message, type)
+          showNotification(message, type)
         }
-      })
+      }),
     )
   }
 
-  // UI update methods triggered by events
-  private updateExpandedState(isExpanded: boolean): void {
-    const toolbarCard = this.shadowRoot?.getElementById('toolbarCard')
-    const toggleButton = this.shadowRoot?.getElementById('toggleButton')
-
-    if (isExpanded) {
-      toolbarCard?.classList.add('expanded')
-      toggleButton?.classList.add('active')
-    } else {
-      toolbarCard?.classList.remove('expanded')
-      toggleButton?.classList.remove('active')
-    }
-  }
-
-  private updateInspectionState(isInspecting: boolean): void {
-    const toolbarCard = this.shadowRoot?.querySelector('.toolbar-card')
-
-    if (isInspecting) {
-      toolbarCard?.classList.add('inspecting')
-    } else {
-      toolbarCard?.classList.remove('inspecting')
-    }
-  }
-
-  private updateProcessingState(isProcessing: boolean): void {
-    const toolbarCard = this.shadowRoot?.getElementById('toolbarCard')
-
-    if (isProcessing) {
-      toolbarCard?.classList.add('processing')
-    } else {
-      toolbarCard?.classList.remove('processing')
-    }
-  }
-
-  private updateSessionDisplay(sessionId?: string | null): void {
-    const sessionInfoElement = this.shadowRoot?.getElementById('sessionInfo')
-    const sessionIdElement = this.shadowRoot?.getElementById('sessionId')
-    const cancelButton = this.shadowRoot?.getElementById('cancelButton')
-
-    if (sessionInfoElement && sessionIdElement) {
-      if (sessionId) {
-        sessionInfoElement.style.display = 'flex'
-        sessionIdElement.textContent = sessionId.substring(0, 8)
-        sessionIdElement.title = sessionId
-      } else {
-        sessionInfoElement.style.display = 'none'
-      }
-
-      // Show/hide cancel button based on processing state
-      if (cancelButton) {
-        if (this.stateManager.isProcessing()) {
-          cancelButton.style.display = 'inline-flex'
-        } else {
-          cancelButton.style.display = 'none'
-        }
-      }
-    }
-  }
+  // UI helper methods
 
   private updateSelectionDisplay(): void {
-    this.updateClearButtonVisibility()
-  }
-
-  private updateClearButtonVisibility(): void {
-    const clearElementButton = this.shadowRoot?.getElementById('clearElementButton')
-    if (clearElementButton) {
-      const hasSelectedElements = this.selectionManager.getSelectedCount() > 0
-      clearElementButton.style.display = hasSelectedElements ? 'inline-flex' : 'none'
-    }
+    const hasSelectedElements = this.selectionManager.getSelectedCount() > 0
+    updateClearButtonVisibility(this.shadowRoot, hasSelectedElements)
   }
 
   private displayMessage(message: SendMessageResponse): void {
-    this.displayJsonMessage(message)
+    displayJsonMessage(this.shadowRoot, message, this.messageFormatter)
   }
+
 
   private clearMessagesDisplay(): void {
-    this.clearJsonDisplay()
-  }
-
-  private clearPromptInput(): void {
-    const promptInput = this.shadowRoot?.getElementById('promptInput') as HTMLTextAreaElement
-    if (promptInput) promptInput.value = ''
+    clearJsonDisplay(this.shadowRoot)
+    this.messageFormatter.clearMessages()
   }
 
   private attachDOMEventListeners(): void {
@@ -266,8 +216,9 @@ export class InspectorToolbar extends HTMLElement {
 
       if (promptInput) promptInput.value = ''
       this.selectionManager.clearAllSelections()
-      this.updateClearButtonVisibility()
-      this.clearJsonDisplay()
+      updateClearButtonVisibility(this.shadowRoot, false)
+      clearJsonDisplay(this.shadowRoot)
+      this.messageFormatter.clearMessages()
 
       this.events.emit('ui:enter-inspection', undefined)
 
@@ -288,14 +239,15 @@ export class InspectorToolbar extends HTMLElement {
       if (this.aiManager.isProcessing()) {
         this.aiManager.cancel()
         this.setProcessingState(false)
-        this.showNotification('Request cancelled', 'success')
+        showNotification('Request cancelled', 'success')
         
         // Start new chat after canceling
         if (promptInput) promptInput.value = ''
         this.selectionManager.clearAllSelections()
-        this.updateClearButtonVisibility()
-        this.clearJsonDisplay()
-        
+        updateClearButtonVisibility(this.shadowRoot, false)
+        clearJsonDisplay(this.shadowRoot)
+        this.messageFormatter.clearMessages()
+
         if (this.aiManager.isInitialized()) {
           try {
             await this.aiManager.newChat()
@@ -337,7 +289,8 @@ export class InspectorToolbar extends HTMLElement {
     } else {
       this.selectionManager.selectElement(element, findNearestComponent)
     }
-    this.updateClearButtonVisibility()
+    const hasSelectedElements = this.selectionManager.getSelectedCount() > 0
+    updateClearButtonVisibility(this.shadowRoot, hasSelectedElements)
   }
 
   private shouldIgnoreElement(element: Element): boolean {
@@ -421,15 +374,15 @@ export class InspectorToolbar extends HTMLElement {
       const messageHandler: AIMessageHandler = {
         onData: (data: SendMessageResponse) => {
           if (data.type === 'claude_json') {
-            this.hideProcessingIndicator()
-            this.displayJsonMessage(data.claudeJson)
+            hideProcessingIndicator(this.shadowRoot)
+            displayJsonMessage(this.shadowRoot, data.claudeJson, this.messageFormatter)
           } else if (data.type === 'claude_response') {
-            this.hideProcessingMessage()
-            this.displayJsonMessage(data.claudeResponse)
+            hideProcessingMessage(this.shadowRoot)
+            displayJsonMessage(this.shadowRoot, data.claudeResponse, this.messageFormatter)
           } else if (data.type === 'complete') {
             if (promptInput) promptInput.value = ''
-            this.hideProcessingIndicator()
-            this.hideProcessingMessage()
+            hideProcessingIndicator(this.shadowRoot)
+            hideProcessingMessage(this.shadowRoot)
             this.setProcessingState(false)
           }
           
@@ -440,7 +393,7 @@ export class InspectorToolbar extends HTMLElement {
         },
         onError: (error) => {
           console.error('AI subscription error:', error)
-          this.showNotification('Failed to send message', 'error')
+          showNotification('Failed to send message', 'error')
           this.setProcessingState(false)
         },
         onComplete: () => {
@@ -465,46 +418,7 @@ export class InspectorToolbar extends HTMLElement {
     }
   }
 
-  private showNotification(message: string, type: 'success' | 'error'): void {
-    console.log(`${type}: ${message}`)
-  }
 
-  private displayJsonMessage(jsonData: any): void {
-    const jsonDisplay = this.shadowRoot?.getElementById('jsonDisplay')
-    const jsonContent = this.shadowRoot?.getElementById('jsonContent')
-
-    if (!jsonDisplay || !jsonContent) return
-
-    if (!this.messageFormatter.shouldShowMessage(jsonData)) {
-      return
-    }
-
-    const formattedMessage = this.messageFormatter.createMessage(jsonData)
-    if (!formattedMessage) {
-      return
-    }
-    
-    jsonDisplay.classList.add('show')
-
-    // Create regular message element
-    const messageElement = document.createElement('div')
-    messageElement.classList.add('json-message', jsonData.type || 'generic')
-    messageElement.innerHTML = formattedMessage
-    jsonContent.appendChild(messageElement)
-
-    jsonContent.scrollTop = jsonContent.scrollHeight
-  }
-
-  private clearJsonDisplay(): void {
-    const jsonDisplay = this.shadowRoot?.getElementById('jsonDisplay')
-    const jsonContent = this.shadowRoot?.getElementById('jsonContent')
-
-    if (!jsonDisplay || !jsonContent) return
-
-    jsonContent.innerHTML = ''
-    jsonDisplay.classList.remove('show')
-    this.messageFormatter.clearMessages()
-  }
 
 
 
@@ -512,51 +426,12 @@ export class InspectorToolbar extends HTMLElement {
 
   private setProcessingState(isProcessing: boolean): void {
     if (isProcessing) {
-      this.showProcessingIndicator()
+      showProcessingIndicator(this.shadowRoot)
       this.events.emit('ui:processing-start', undefined)
       window.onbeforeunload = () => 'Processing in progress. Are you sure you want to leave?'
     } else {
       this.events.emit('ui:processing-end', undefined)
       window.onbeforeunload = null
-    }
-  }
-
-  private showProcessingIndicator(): void {
-    const processingIndicator = this.shadowRoot?.getElementById('processingIndicator')
-    const processingMessage = this.shadowRoot?.getElementById('processingMessage')
-    const jsonDisplay = this.shadowRoot?.getElementById('jsonDisplay')
-
-    if (processingIndicator) {
-      processingIndicator.style.display = 'block'
-    }
-
-    // Show processing message at the end of message list
-    if (processingMessage && jsonDisplay) {
-      processingMessage.classList.add('show')
-      jsonDisplay.classList.add('show')
-
-      // Scroll to bottom to show the processing indicator
-      const jsonContent = this.shadowRoot?.getElementById('jsonContent')
-      if (jsonContent) {
-        jsonContent.scrollTop = jsonContent.scrollHeight
-      }
-    }
-  }
-
-  private hideProcessingIndicator(): void {
-    const processingIndicator = this.shadowRoot?.getElementById('processingIndicator')
-
-    if (processingIndicator) {
-      processingIndicator.style.display = 'none'
-    }
-  }
-
-  private hideProcessingMessage(): void {
-    const processingMessage = this.shadowRoot?.getElementById('processingMessage')
-
-    // Hide processing message from message list
-    if (processingMessage) {
-      processingMessage.classList.remove('show')
     }
   }
 
