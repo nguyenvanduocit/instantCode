@@ -3,6 +3,8 @@
  * Organized by component and animation types
  */
 
+import { css } from 'lit'
+
 // Configuration constants for animations
 export const ANIMATION_CONFIG = {
   DURATIONS: {
@@ -13,8 +15,8 @@ export const ANIMATION_CONFIG = {
   }
 } as const
 
-// Combined styles for the toolbar
-export const TOOLBAR_STYLES = `
+// Combined styles for the toolbar as CSSResult
+export const TOOLBAR_STYLES = css`
   :host {
     position: fixed;
     bottom: 20px;
