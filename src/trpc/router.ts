@@ -5,11 +5,12 @@ import { query, Options } from '@anthropic-ai/claude-code'
 import type { Context } from './context'
 import {
   ElementDataSchema,
-  StructuredMessageSchema,
+  SendMessageSchema,
   type ElementData,
   type PageInfo,
   type SendMessageResponse
 } from '../shared/schemas'
+import { sampleSendMessageResponses } from '../sample'
 
 const t = initTRPC.context<Context>().create({
   transformer: superjson,
@@ -26,19 +27,17 @@ export const appRouter = router({
     timestamp: new Date().toISOString(),
   })),
 
-  newChat: publicProcedure.mutation(({ ctx }) => {
-    ctx.logger.log('New chat initiated')
-    return { message: 'New chat initiated' }
-  }),
+  newChat: publicProcedure
+    .mutation(() => {
+      // Client resets its own session ID; server just acknowledges
+      return { success: true }
+    }),
 
   sendMessage: publicProcedure
-    .input(StructuredMessageSchema)
+    .input(SendMessageSchema)
     .subscription(async function* ({ input, signal, ctx }) {
       const subscriptionId = Math.random().toString(36).substring(7)
       ctx.logger.log(`🔵 [SERVER] New subscription created: ${subscriptionId} for session: ${input.sessionId || 'new'}`)
-      
-      // Process with Claude Code
-      let currentSessionId: string | undefined = input.sessionId
 
       ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent connection message`)
 
@@ -54,6 +53,30 @@ export const appRouter = router({
       ctx.logger.log('Extracted component locations:', componentLocations)
 
       try {
+        // Mock mode: stream deterministic frames for UI/dev without real backend calls
+        if (ctx.isMock) {
+          ctx.logger.log(`🧪 [SERVER ${subscriptionId}] Mock mode enabled - streaming sample messages`)
+          for await (const message of sampleSendMessageResponses(input)) {
+            if (signal?.aborted) {
+              yield {
+                type: 'result',
+                subtype: 'error',
+                is_error: true,
+                duration_ms: 0,
+                duration_api_ms: 0,
+                result: 'Request was cancelled',
+                session_id: input.sessionId || ''
+              } as SendMessageResponse
+              break
+            }
+            yield message as SendMessageResponse
+            ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent mock message: ${message.type}`)
+          }
+          ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent mock completion message`)
+          ctx.logger.log(`🔴 [SERVER] Subscription ${subscriptionId} ended`)
+          return
+        }
+
         const abortController = new AbortController()
         
         // Forward the tRPC signal cancellation to our AbortController
@@ -89,22 +112,14 @@ export const appRouter = router({
               duration_ms: 0,
               duration_api_ms: 0,
               result: 'Request was cancelled',
-              session_id: currentSessionId || '',
+              session_id: message.session_id,
             } as SendMessageResponse
             break
           }
 
-          // Update current session ID if Claude provides one
-          if (message.session_id) {
-            currentSessionId = message.session_id
-          }
-
 
           // Stream all Claude Code messages directly to the toolbar with their original type
-          yield {
-            ...message,
-            session_id: currentSessionId,
-          } as SendMessageResponse
+          yield message as SendMessageResponse
           ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent message: ${message.type}`)
 
         }
@@ -120,7 +135,7 @@ export const appRouter = router({
             duration_ms: 0,
             duration_api_ms: 0,
             result: 'Request was cancelled',
-            session_id: currentSessionId || '',
+            session_id: input.sessionId,
           } as SendMessageResponse
           ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent cancellation messages`)
         } else {
@@ -133,7 +148,7 @@ export const appRouter = router({
             duration_ms: 0,
             duration_api_ms: 0,
             result: 'Error processing with Claude: ' + (error as Error).message,
-            session_id: currentSessionId || '',
+            session_id: input.sessionId,
           } as SendMessageResponse
           ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent error messages`)
         }
@@ -202,7 +217,7 @@ function formatAIPrompt(userPrompt: string, selectedElements: ElementData[], pag
   }
 
   if (selectedElements && selectedElements.length > 0) {
-    formattedPrompt += `<inspectedElements>${JSON.stringify(selectedElements, replacer)}</inspectedElements>`
+    formattedPrompt += `<selection>//format: filepath:line:column \n\n${JSON.stringify(selectedElements, replacer)}</selection>`
   }
 
   if (consoleErrors && consoleErrors.length > 0) {

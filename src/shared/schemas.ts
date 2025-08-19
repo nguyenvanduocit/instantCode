@@ -19,7 +19,7 @@ export const PageInfoSchema = z.object({
   title: z.string(),
 })
 
-export const StructuredMessageSchema = z.object({
+export const SendMessageSchema = z.object({
   userPrompt: z.string(),
   selectedElements: z.array(ElementDataSchema),
   pageInfo: PageInfoSchema,
@@ -32,7 +32,6 @@ export const StructuredMessageSchema = z.object({
 
 
 export const SendMessageResponseSchema = z.union([
-// Claude Code message types - detailed schemas based on actual data
 
 // 'system' message type
   z.object({
@@ -123,5 +122,5 @@ export const SendMessageResponseSchema = z.union([
 // Infer TypeScript types from Zod schemas
 export type ElementData = z.infer<typeof ElementDataSchema>
 export type PageInfo = z.infer<typeof PageInfoSchema>
-export type StructuredMessage = z.infer<typeof StructuredMessageSchema>
+export type SendMessage = z.infer<typeof SendMessageSchema>
 export type SendMessageResponse = z.infer<typeof SendMessageResponseSchema>

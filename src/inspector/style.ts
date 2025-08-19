@@ -18,19 +18,31 @@ export const ANIMATION_CONFIG = {
 // Combined styles for the toolbar as CSSResult
 export const TOOLBAR_STYLES = css`
   :host {
+    /* CSS Custom Properties */
+    --primary-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --gradient-colors: linear-gradient(135deg, #FF6B6B, #FF9671, #FFA75F, #F9D423, #FECA57, #FF7E67, #FF8C42, #FFC857);
+    --shadow-primary: rgba(255, 107, 107, 0.5);
+    --border-radius: 6px;
+    --transition-spring: cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    --color-border: #e5e7eb;
+    --color-text: #1f2937;
+    --color-text-muted: #64748b;
+    --color-bg-light: #f8fafc;
+    --color-white: #ffffff;
+    
     position: fixed;
-    bottom: 20px;
-    right: 40px;
+    bottom: 5px;
+    right: 5px;
     z-index: 999999;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    font-family: var(--primary-font) !important;
   }
 
   :host * {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+    font-family: var(--primary-font) !important;
     box-sizing: border-box;
   }
 
-  .hidden{
+  .hidden {
     display: none !important;
   }
 
@@ -61,17 +73,6 @@ export const TOOLBAR_STYLES = css`
     100% { box-shadow: 0 0 10px 5px rgba(255, 107, 107, 0.4), 0 0 20px 10px rgba(255, 150, 113, 0.2), 0 0 0 2px rgba(255, 255, 255, 0.1); }
   }
 
-  @keyframes rotateMist {
-    0% { transform: rotate(0deg) scale(1); }
-    17% { transform: rotate(83deg) scale(1.15) translateX(3px); }
-    31% { transform: rotate(127deg) scale(0.95) translateY(-4px); }
-    48% { transform: rotate(195deg) scale(1.12) translateX(-2px) translateY(3px); }
-    63% { transform: rotate(246deg) scale(1.05) translateY(5px); }
-    79% { transform: rotate(301deg) scale(0.97) translateX(4px) translateY(-2px); }
-    91% { transform: rotate(342deg) scale(1.08) translateY(-3px); }
-    100% { transform: rotate(360deg) scale(1); }
-  }
-
   @keyframes pulse {
     0%, 100% { opacity: 0.8; }
     50% { opacity: 1; }
@@ -83,21 +84,27 @@ export const TOOLBAR_STYLES = css`
     60% { content: '..'; }
     80%, 100% { content: '...'; }
   }
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+
   .toolbar-button {
-    width: 50px;
-    height: 50px;
+    width: 36px;
+    height: 36px;
     border-radius: 50%;
-    background: linear-gradient(135deg, #FF6B6B, #FF9671, #FFA75F, #F9D423, #FECA57, #FF7E67, #FF8C42, #FFC857);
+    background: var(--gradient-colors);
     background-size: 400% 400%;
-    animation: gradientShift 7.3s ease-in-out infinite, glowingAura 9.7s infinite cubic-bezier(0.42, 0, 0.58, 1);
+    animation: gradientShift 7.3s ease-in-out infinite;
     border: none;
-    color: white;
+    color: var(--color-white);
     cursor: pointer;
-    filter: drop-shadow(0 0 8px rgba(255, 107, 107, 0.5));
+    filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.5s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    transition: all 0.5s var(--transition-spring);
     position: relative;
     z-index: 10000000;
   }
@@ -105,53 +112,43 @@ export const TOOLBAR_STYLES = css`
   .toolbar-button::before {
     content: '';
     position: absolute;
-    inset: -10px;
+    inset: -3px;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(255, 107, 107, 0.3) 0%, rgba(255, 140, 66, 0.2) 50%, rgba(249, 212, 35, 0.1) 70%, transparent 100%);
-    filter: blur(10px);
-    opacity: 0.7;
+    background: radial-gradient(circle, rgba(255, 107, 107, 0.1) 0%, transparent 70%);
+    filter: blur(4px);
+    opacity: 0.3;
     z-index: -1;
-    animation: rotateMist 13.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
-    transition: all 0.5s ease;
+    transition: all 0.3s ease;
   }
 
-  @keyframes rotateMist {
-    0% { transform: rotate(0deg) scale(1); }
-    17% { transform: rotate(83deg) scale(1.15) translateX(3px); }
-    31% { transform: rotate(127deg) scale(0.95) translateY(-4px); }
-    48% { transform: rotate(195deg) scale(1.12) translateX(-2px) translateY(3px); }
-    63% { transform: rotate(246deg) scale(1.05) translateY(5px); }
-    79% { transform: rotate(301deg) scale(0.97) translateX(4px) translateY(-2px); }
-    91% { transform: rotate(342deg) scale(1.08) translateY(-3px); }
-    100% { transform: rotate(360deg) scale(1); }
-  }
 
   .toolbar-button:hover {
-    transform: scale(1.1);
+    transform: scale(1.05);
+    filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15));
   }
 
   .toolbar-button:hover::before {
-    inset: -15px;
-    filter: blur(15px);
-    opacity: 0.9;
+    inset: -4px;
+    filter: blur(6px);
+    opacity: 0.4;
   }
 
   .toolbar-button.active {
     background-size: 400% 400%;
     animation: gradientShift 5.2s cubic-bezier(0.36, 0.11, 0.89, 0.32) infinite;
-    transform: scale(1.15);
+    transform: scale(1.08);
+    filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.2));
   }
 
   .toolbar-button.active::before {
-    inset: -20px;
-    filter: blur(20px);
-    opacity: 1;
-    animation: rotateMist 9.7s cubic-bezier(0.34, 0.82, 0.6, 0.23) infinite;
+    inset: -5px;
+    filter: blur(8px);
+    opacity: 0.5;
   }
 
   .toolbar-button .icon {
-    width: 25px;
-    height: 25px;
+    width: 18px;
+    height: 18px;
     animation: blinkEye 5s infinite;
   }
 
@@ -159,9 +156,9 @@ export const TOOLBAR_STYLES = css`
     cursor: auto !important;
     position: absolute;
     bottom: 30px;
-    right: -13px;
+    right: 0px;
     background: white;
-    border-radius: 10px;
+    border-radius: 5px;
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
     padding: 12px;
     display: none;
@@ -191,10 +188,10 @@ export const TOOLBAR_STYLES = css`
     align-items: center;
     gap: 6px;
     font-size: 11px;
-    color: #64748b;
+    color: var(--color-text-muted);
     padding: 4px 8px;
-    background: #f8fafc;
-    border: 1px solid #e2e8f0;
+    background: var(--color-bg-light);
+    border: 1px solid var(--color-border);
     border-radius: 4px;
   }
 
@@ -204,10 +201,10 @@ export const TOOLBAR_STYLES = css`
 
   .session-id {
     font-family: 'Monaco', 'Courier New', monospace;
-    background: #ffffff;
+    background: var(--color-white);
     padding: 2px 6px;
     border-radius: 3px;
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--color-border);
     font-size: 10px;
     color: #374151;
     min-width: 60px;
@@ -225,8 +222,8 @@ export const TOOLBAR_STYLES = css`
   .toolbar-input {
     flex: 1;
     padding: 8px 12px;
-    border: 1px solid #e5e7eb;
-    border-radius: 6px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--border-radius);
     font-size: 13px;
     transition: border-color 0.2s ease;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
@@ -242,11 +239,11 @@ export const TOOLBAR_STYLES = css`
   .action-button {
     padding: 4px 8px;
     border: none;
-    border-radius: 6px;
+    border-radius: var(--border-radius);
     cursor: pointer;
     font-size: 12px;
     font-weight: 500;
-    transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+    transition: all 0.4s var(--transition-spring);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -259,106 +256,83 @@ export const TOOLBAR_STYLES = css`
   .inspect-button {
     background: #4b83da;
     border: 1px solid #2d5ca8;
-    color: white;
+    color: var(--color-white);
   }
 
   .inspect-button:hover {
     background: #3a72c9;
-    transform: translateY(-1px);
     box-shadow: 0 3px 6px rgba(59, 130, 246, 0.2);
   }
 
-  .inspect-button:active {
-    transform: translateY(0);
-    background: #2c5aa0;
-  }
+  .inspect-button:active { background: #2c5aa0; }
 
   .close-button {
     background: #e05252;
     border: 1px solid #b03e3e;
-    color: white;
+    color: var(--color-white);
     display: none;
   }
 
   .close-button:hover {
     background: #cc4545;
-    transform: translateY(-1px);
     box-shadow: 0 3px 6px rgba(224, 82, 82, 0.2);
   }
 
-  .close-button:active {
-    transform: translateY(0);
-    background: #b73a3a;
-  }
+  .close-button:active { background: #b73a3a; }
 
   .new-chat-button {
     background: #4ead88;
     border: 1px solid #3a8a68;
-    color: white;
+    color: var(--color-white);
+    height: 20px;
+    font-size: 11px;
   }
 
   .new-chat-button:hover {
     background: #419a78;
-    transform: translateY(-1px);
     box-shadow: 0 3px 6px rgba(78, 173, 136, 0.2);
   }
 
-  .new-chat-button:active {
-    transform: translateY(0);
-    background: #358a6c;
-  }
+  .new-chat-button:active { background: #358a6c; }
 
   .cancel-button {
     background: #f59e0b;
     border: 1px solid #d97706;
-    color: white;
-    display: none;
+    color: var(--color-white);
   }
 
   .cancel-button:hover {
     background: #e5890c;
-    transform: translateY(-1px);
     box-shadow: 0 3px 6px rgba(245, 158, 11, 0.2);
   }
 
-  .cancel-button:active {
-    transform: translateY(0);
-    background: #d97706;
-  }
+  .cancel-button:active { background: #d97706; }
 
   .clear-button {
     background: #6b7280;
     border: 1px solid #4b5563;
-    color: white;
+    color: var(--color-white);
   }
 
   .clear-button:hover {
     background: #5d646f;
-    transform: translateY(-1px);
     box-shadow: 0 3px 6px rgba(107, 114, 128, 0.2);
   }
 
-  .clear-button:active {
-    transform: translateY(0);
-    background: #4b5563;
-  }
+  .clear-button:active { background: #4b5563; }
 
   .copy-button {
     background: #8b5cf6;
     border: 1px solid #7c3aed;
-    color: white;
+    color: var(--color-white);
   }
 
   .copy-button:hover {
     background: #7c3aed;
-    transform: translateY(-1px);
     box-shadow: 0 3px 6px rgba(139, 92, 246, 0.2);
   }
 
-  .copy-button:active {
-    transform: translateY(0);
-    background: #6d28d9;
-  }
+  .copy-button:active { background: #6d28d9; }
 
   .inspecting .close-button {
     display: inline-flex;
@@ -423,97 +397,133 @@ export const TOOLBAR_STYLES = css`
     overflow: auto;
   }
 
-  .json-message {
-    margin-bottom: 3px;
-    padding: 6px 8px;
+  .message {
+    padding: 0px;
     background: #fafbfc;
-    border-left: 3px solid #e2e8f0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    color: #1f2937;
+    border-left: 3px solid var(--color-border);
+    font-family: var(--primary-font);
+    color: var(--color-text);
     line-height: 1.4;
+    font-size: 11px;
   }
 
-  .json-message.assistant {
+  .message.assistant {
     border-left-color: #3b82f6;
     background: #f0f9ff;
   }
 
-  .json-message.user {
+  .message.user {
     border-left-color: #10b981;
     background: #f0fdf4;
   }
 
-  .json-message.system {
+  .message.system {
     border-left-color: #64748b;
     background: #f8fafc;
     font-size: 10px;
     color: #64748b;
   }
 
-  .json-message.result {
+  .message.result {
     border-left-color: #8b5cf6;
     background: #faf5ff;
-    font-size: 14px;
   }
 
   .message-wrapper {
     position: relative;
   }
 
-  .message-badge {
-    position: absolute;
-    top: -9px;
-    right: -7px;
+  .badge {
+    display: block;
     background: #4f46e5;
     color: white;
-    font-size: 8px;
-    font-weight: 500;
+    font-size: 9px;
+    font-weight: 600;
     padding: 2px 6px;
-    border-radius: 8px;
-    white-space: nowrap;
-    z-index: 1;
-    line-height: 1.2;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    vertical-align: top;
+    border-top-right-radius: 4px;
   }
 
-  .json-message.assistant .message-badge {
+  /* Legacy message-based badge colors (fallback) */
+  .message.assistant .badge {
     background: #3b82f6;
   }
 
-  .json-message.user .message-badge {
+  .message.user .badge {
     background: #10b981;
   }
 
-  .json-message.system .message-badge {
+  .message.system .badge {
     background: #64748b;
   }
 
-  .json-message.result .message-badge {
+  .message.result .badge {
     background: #8b5cf6;
   }
 
-  .json-message pre {
-    margin: 0;
-    overflow: auto;
+  /* New badge type-specific colors (higher specificity) */
+  .badge.badge-system {
+    background: #64748b;
   }
 
-  .message-content {
+  .badge.badge-assistant {
+    background: #3b82f6;
+  }
+
+  .badge.badge-todo {
+    background: #10b981;
+  }
+
+  .badge.badge-tool-file {
+    background: #f59e0b;
+  }
+
+  .badge.badge-tool-exec {
+    background: #dc2626;
+  }
+
+  .badge.badge-tool-search {
+    background: #8b5cf6;
+  }
+
+  .badge.badge-tool-web {
+    background: #06b6d4;
+  }
+
+  .badge.badge-user {
+    background: #10b981;
+  }
+
+  .badge.badge-complete {
+    background: #059669;
+  }
+
+  .badge.badge-error {
+    background: #dc2626;
+  }
+
+  .badge.badge-default {
+    background: #6b7280;
+  }
+
+  .message-content{
+    padding: 5px;
+    white-space: break-spaces;
+  }
+
+  .message pre {
+    margin: 4px 0;
+    overflow-x: auto;
     white-space: pre-wrap;
     word-break: break-word;
-    margin: 0;
-    font-size: 10px
   }
 
-  .result .message-content {
-    font-size: 13px;
-  }
-
-  .message-meta {
+  .meta {
+    display: block;
     font-size: 9px;
     color: #94a3b8;
-    margin-top: 4px;
-    display: flex;
-    gap: 8px;
+    padding: 5px;
+    padding-top: 0px;
   }
 
   .tool-use {
@@ -542,43 +552,38 @@ export const TOOLBAR_STYLES = css`
     overflow-y: auto;
   }
 
-  .json-message:last-child {
+  .message:last-child {
     margin-bottom: 0;
   }
 
-  .json-message .tool-combined {
+  .message .tool-combined {
     background: #f8fafc;
     border: 1px solid #e2e8f0;
     border-radius: 4px;
     padding: 6px 8px;
-    margin: 2px 0;
+    margin: 4px 0;
     font-family: 'Courier New', monospace;
     font-size: 10px;
     line-height: 1.3;
   }
 
-  .json-message .tool-section {
+  .message .tool-section {
     margin: 3px 0;
     padding: 2px 0;
   }
 
-  .json-message .tool-section:not(:last-child) {
+  .message .tool-section:not(:last-child) {
     border-bottom: 1px solid #e5e7eb;
     padding-bottom: 4px;
   }
 
-  .json-message[data-tool-call-id] {
+  .message[data-tool-call-id] {
     position: relative;
     transition: all 0.3s ease;
   }
 
-  .json-message[data-tool-call-id] .message-badge {
+  .message[data-tool-call-id] .badge {
     transition: all 0.3s ease;
-  }
-
-  .json-message[data-tool-call-id]:has(.message-content:contains("Running")) .message-badge {
-    background: #f59e0b;
-    animation: pulse 2s infinite;
   }
 
   @keyframes toolPulse {
@@ -618,19 +623,12 @@ export const TOOLBAR_STYLES = css`
     animation: dots 1.5s infinite;
   }
 
-  @keyframes dots {
-    0%, 20% { content: ''; }
-    40% { content: '.'; }
-    60% { content: '..'; }
-    80%, 100% { content: '...'; }
-  }
-
   .processing-message {
     margin-bottom: 3px;
     padding: 8px 12px;
     background: #fffbeb;
     border-left: 3px solid #f59e0b;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--primary-font);
     font-size: 11px;
     color: #92400e;
     line-height: 1.4;

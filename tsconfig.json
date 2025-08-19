@@ -19,7 +19,9 @@
     "allowSyntheticDefaultImports": true,
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
-    "types": ["node"]
+    "types": [
+      "node"
+    ],
   },
   "include": ["src/**/*"],
   "exclude": [

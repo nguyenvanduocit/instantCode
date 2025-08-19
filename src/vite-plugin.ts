@@ -10,6 +10,11 @@ export interface InspectorPluginOptions {
    * @default false
    */
   verbose?: boolean;
+  /**
+   * Enable mock mode (serve deterministic mock stream instead of real backend calls)
+   * @default false
+   */
+  mock?: boolean;
 }
 
 class InspectorServerManager {
@@ -21,6 +26,7 @@ class InspectorServerManager {
   constructor(options: InspectorPluginOptions = {}) {
     this.options = {
       verbose: options.verbose ?? false,
+      mock: options.mock ?? false,
     };
 
     // Detect if we're running from source or from installed package
@@ -80,15 +86,21 @@ class InspectorServerManager {
       }
     }
 
+    // Add CLI arguments for verbose and mock modes
+    if (this.options.verbose) {
+      args.push('--verbose');
+    }
+    if (this.options.mock) {
+      args.push('--mock');
+    }
+
     this.log(`Starting inspector server: ${cmd} ${args.join(' ')}`);
     this.log(`Working directory: ${this.packageDir}`);
 
-    // Start the server process with port environment variable
+    // Start the server process
     this.serverProcess = spawn(cmd, args, {
       cwd: this.packageDir,
-      env: {
-        ...process.env,
-      },
+      env: process.env,
       stdio: this.options.verbose ? 'inherit' : 'pipe',
     });
 

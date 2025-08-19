@@ -18,6 +18,6 @@ export type ProcessElementsOutput = RouterOutput['processElements']
 export type {
   ElementData,
   PageInfo,
-  StructuredMessage,
+  SendMessage,
   SendMessageResponse
 } from './schemas'

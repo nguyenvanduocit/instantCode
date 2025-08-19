@@ -89,10 +89,19 @@ The Vite plugin accepts these options:
 ```typescript
 inspectorPlugin({
   verbose: false,  // Enable detailed logging (default: false)
+  mock: false,     // Enable mock mode to stream deterministic sample responses (default: false)
 })
 ```
 
 **Note**: The server automatically runs on port 7318 and auto-injects the toolbar - no additional configuration needed!
+
+### Mock mode
+
+Set `mock: true` in the plugin options to develop UI without Claude Code installed or external calls. The server will stream a deterministic series of frames that mimic actual responses (including a sample "🟢 Vue component found" message). You can also enable mock mode via environment variable when running the standalone server:
+
+```bash
+INSTANTCODE_MOCK=true bunx instantcode
+```
 
 ## What Happens When You Use the Plugin?
 

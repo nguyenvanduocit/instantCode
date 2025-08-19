@@ -1,15 +1,7 @@
 #!/usr/bin/env node
 
-import { startServer, stopServer } from './trpc-server'
+import { startServer, stopServer, type ServerInstance } from './trpc-server'
 import { execSync } from 'child_process'
-
-interface ServerInstance {
-  app: any
-  server: any
-  wss: any
-  port: number
-  verbose: boolean
-}
 
 let serverInstance: ServerInstance | null = null
 let isShuttingDown = false
@@ -18,6 +10,8 @@ let isShuttingDown = false
 const args = process.argv.slice(2)
 const helpFlag = args.includes('--help') || args.includes('-h')
 const versionFlag = args.includes('--version') || args.includes('-v')
+const mockFlag = args.includes('--mock') || args.includes('-m')
+const verboseFlag = args.includes('--verbose') || args.includes('-V')
 const portFlag = args.findIndex(arg => arg === '--port' || arg === '-p')
 
 if (helpFlag) {
@@ -30,12 +24,16 @@ Usage:
 
 Options:
   -p, --port <number>    Port to run the server on (default: 7318)
+  -m, --mock            Enable mock mode (skip Claude Code, use sample responses)
+  -V, --verbose         Enable verbose logging
   -h, --help            Show this help message
   -v, --version         Show version number
 
 Examples:
   bunx instantcode                    # Start on default port 7318
   bunx instantcode --port 8080        # Start on port 8080
+  bunx instantcode --mock             # Start in mock mode
+  bunx instantcode --verbose          # Start with verbose logging
   
   # Use directly from GitHub:
   bunx github:nguyenvanduocit/instantCode
@@ -56,9 +54,10 @@ if (versionFlag) {
   process.exit(0)
 }
 
-// Parse port and verbose settings
+// Parse port, verbose, and mock settings from CLI args
 let port = 7318
-const isVerbose = process.env.VERBOSE === 'true'
+const isVerbose = verboseFlag || process.env.VERBOSE === 'true'
+const isMock = mockFlag
 
 // Check environment variables for port override
 if (process.env.INSPECTOR_PORT) {
@@ -112,13 +111,17 @@ function showClaudeCodeInstallationInstructions(): void {
 
 async function main() {
   try {
-    // Check if Claude Code is installed
-    if (!checkClaudeCodeInstallation()) {
-      showClaudeCodeInstallationInstructions()
-      process.exit(1)
+    // Check if Claude Code is installed (skip in mock mode)
+    if (!isMock) {
+      if (!checkClaudeCodeInstallation()) {
+        showClaudeCodeInstallationInstructions()
+        process.exit(1)
+      }
+    } else {
+      console.log('🧪 Starting in MOCK mode - skipping Claude Code check')
     }
 
-    serverInstance = await startServer(port, isVerbose)
+    serverInstance = await startServer(port, isVerbose, isMock)
     console.log(`✅ Server running on http://localhost:${port}`)
     console.log(`📋 Add to your webpage: <script src="http://localhost:${port}/inspector-toolbar.js"></script>`)
     console.log(`⏹️  Ctrl+C to stop`)
