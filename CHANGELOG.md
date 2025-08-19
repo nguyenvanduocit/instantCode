@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.8.0](https://github.com/nguyenvanduocit/instantCode/compare/v1.7.0...v1.8.0) (2025-08-19)
+
+
+### Features
+
+* **inspector:** add mock mode support and enhance message display ([0450da5](https://github.com/nguyenvanduocit/instantCode/commit/0450da598254ebec9db810e6cf4aefd7a07a9cb9))
+
 ## [1.7.0](https://github.com/nguyenvanduocit/instantCode/compare/v1.6.0...v1.7.0) (2025-08-19)
 
 
