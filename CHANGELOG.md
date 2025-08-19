@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/nguyenvanduocit/instantCode/compare/v1.4.0...v1.5.0) (2025-08-19)
+
+
+### Features
+
+* **vite:** add Vite plugin for seamless development integration ([b1d86fc](https://github.com/nguyenvanduocit/instantCode/commit/b1d86fcf88815a999adda5f87549726b4a254f63))
+
 ## [1.4.0](https://github.com/nguyenvanduocit/instantCode/compare/v1.3.0...v1.4.0) (2025-08-18)
 
 
