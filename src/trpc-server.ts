@@ -11,12 +11,13 @@ import { WebSocketServer } from 'ws'
 import { createContext, createWSSContext } from './trpc/context'
 import { appRouter } from './trpc/router'
 
-interface ServerInstance {
+export interface ServerInstance {
   app: Express
   server: Server
   wss: WebSocketServer
   port: number
   verbose: boolean
+  isMock: boolean
 }
 
 function setupRoutes(app: Express, verbose: boolean): void {
@@ -50,7 +51,7 @@ document.body.prepend(toolbar);
   })
 }
 
-export async function startServer(port: number, verbose = false): Promise<ServerInstance> {
+export async function startServer(port: number, verbose = false, isMock = false): Promise<ServerInstance> {
   const app = express()
   
   app.use(cors({
@@ -67,7 +68,7 @@ export async function startServer(port: number, verbose = false): Promise<Server
     '/trpc',
     createExpressMiddleware({
       router: appRouter,
-      createContext: (opts) => createContext(opts, verbose),
+      createContext: (opts) => createContext(opts, verbose, isMock),
     })
   )
   
@@ -81,7 +82,7 @@ export async function startServer(port: number, verbose = false): Promise<Server
   applyWSSHandler({
     wss,
     router: appRouter,
-    createContext: (opts) => createWSSContext(opts, verbose),
+    createContext: (opts) => createWSSContext(opts, verbose, isMock),
   })
   
   wss.on('connection', (ws) => {
@@ -93,7 +94,7 @@ export async function startServer(port: number, verbose = false): Promise<Server
   })
   
   
-  return { app, server, wss, port, verbose }
+  return { app, server, wss, port, verbose, isMock }
 }
 
 export async function stopServer(serverInstance: ServerInstance): Promise<void> {

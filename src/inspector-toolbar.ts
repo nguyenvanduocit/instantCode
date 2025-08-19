@@ -8,6 +8,8 @@ import { when } from 'lit/directives/when.js'
 import { classMap } from 'lit/directives/class-map.js'
 import { createRef, ref, type Ref } from 'lit/directives/ref.js'
 
+import * as yaml from 'js-yaml'
+
 import type { ElementData, PageInfo, SendMessageResponse } from './shared/types'
 import { createAIManager, type AIManager, type AIMessageHandler } from './inspector/ai'
 import { createElementSelectionManager, type ElementSelectionManager } from './inspector/selection'
@@ -83,6 +85,7 @@ export class InspectorToolbar extends LitElement {
   // Message formatter state
   private lastMessageHash = ''
   private messageHistory = new Set<string>()
+  private todoWriteToolIds = new Set<string>()
 
   static styles = TOOLBAR_STYLES
 
@@ -155,6 +158,16 @@ export class InspectorToolbar extends LitElement {
 
 
   private addMessage(message: SendMessageResponse): void {
+    // Track TodoWrite tool IDs from assistant messages
+    if (message.type === 'assistant') {
+      this.trackTodoWriteToolIds(message)
+    }
+
+    // Skip displaying TodoWrite tool result messages
+    if (this.isTodoWriteToolResult(message)) {
+      return
+    }
+
     this.messages = [...this.messages, message]
 
     // Auto-scroll to bottom
@@ -169,6 +182,7 @@ export class InspectorToolbar extends LitElement {
     this.messages = []
     this.lastMessageHash = ''
     this.messageHistory.clear()
+    this.todoWriteToolIds.clear()
   }
 
   private clearPrompt(): void {
@@ -180,6 +194,38 @@ export class InspectorToolbar extends LitElement {
   private clearSelection(): void {
     this.selectionManager.clearAllSelections()
     this.hasSelectedElements = false
+  }
+
+  private isTodoWriteToolResult(message: SendMessageResponse): boolean {
+    if (message.type !== 'user') return false
+    
+    const userMessage = message.message
+    if (userMessage.content && Array.isArray(userMessage.content)) {
+      return userMessage.content.some((block: any) => 
+        block.type === 'tool_result' && 
+        block.tool_use_id && 
+        this.isToolIdFromTodoWrite(block.tool_use_id)
+      )
+    }
+    
+    return false
+  }
+
+  private isToolIdFromTodoWrite(toolId: string): boolean {
+    // Check if this tool_use_id corresponds to a TodoWrite tool call
+    // We'll track TodoWrite tool IDs when they're used
+    return this.todoWriteToolIds.has(toolId)
+  }
+
+  private trackTodoWriteToolIds(message: Extract<SendMessageResponse, { type: 'assistant' }>): void {
+    const assistantMessage = message.message
+    if (assistantMessage.content && Array.isArray(assistantMessage.content)) {
+      assistantMessage.content.forEach((block: any) => {
+        if (block.type === 'tool_use' && block.name === 'TodoWrite' && block.id) {
+          this.todoWriteToolIds.add(block.id)
+        }
+      })
+    }
   }
 
 
@@ -289,12 +335,19 @@ export class InspectorToolbar extends LitElement {
     return { content, badge: 'System', meta: '' }
   }
 
+  private renderTodoListFromBlock(block: any): { kind: 'html', value: string } {
+    return {
+      kind: 'html',
+      value: this.renderTodos(block.input.todos as Array<{ id: string, content: string, status: string }>)
+    }
+  }
+
   private renderAssistantMessage(message: Extract<SendMessageResponse, { type: 'assistant' }>): { content: string, badge: string, meta: string } {
     const assistantMessage = message.message
     type Segment = { kind: 'text', value: string } | { kind: 'html', value: string }
     const segments: Segment[] = []
     let containsTodoList = false
-
+    let toolName = ""
     if (assistantMessage.content && Array.isArray(assistantMessage.content)) {
       assistantMessage.content.forEach((block: any) => {
         if (block.type === 'text' && block.text) {
@@ -302,13 +355,11 @@ export class InspectorToolbar extends LitElement {
         } else if (block.type === 'tool_use' && block.name) {
           if (block.name === 'TodoWrite' && block.input && 'todos' in block.input) {
             containsTodoList = true
-            segments.push({
-              kind: 'html',
-              value: this.renderTodos(block.input.todos as Array<{ id: string, content: string, status: string }>)
-            })
+            segments.push(this.renderTodoListFromBlock(block))
           } else {
-            const inputStr = block.input ? JSON.stringify(block.input, null, 2) : '{}'
-            segments.push({ kind: 'text', value: `${block.name}\n${inputStr}` })
+            toolName = block.name
+            const inputStr = block.input ? yaml.dump(block.input, { indent: 2 }) : '{}'
+            segments.push({ kind: 'text', value: inputStr })
           }
         } else if (block.text) {
           segments.push({ kind: 'text', value: block.text })
@@ -334,32 +385,47 @@ export class InspectorToolbar extends LitElement {
     })
 
     const content = htmlParts.join('')
-    const meta = assistantMessage.model ? `Model: ${assistantMessage.model}` : ''
 
-    return { content, badge: (containsTodoList ? 'todo' : 'Claude'), meta }
+    // Build meta information with model and token usage
+    let metaInfo = ''
+    if (assistantMessage.model) {
+      metaInfo = `Model: ${assistantMessage.model}`
+    }
+    if (assistantMessage.usage) {
+      const usage = assistantMessage.usage
+      const tokens: string[] = []
+      if (usage.input_tokens) tokens.push(`${usage.input_tokens}↑`)
+      if (usage.output_tokens) tokens.push(`${usage.output_tokens}↓`)
+      if (usage.cache_read_input_tokens) tokens.push(`${usage.cache_read_input_tokens}(cached)`)
+      if (tokens.length > 0) {
+        const tokenInfo = `Tokens: ${tokens.join(' ')}`
+        metaInfo = metaInfo ? `${metaInfo} | ${tokenInfo}` : tokenInfo
+      }
+    }
+    ``
+    return { content, badge: (containsTodoList ? 'todo' : toolName.length > 0 ? toolName : "Claude"), meta: metaInfo }
   }
 
   private renderUserMessage(message: Extract<SendMessageResponse, { type: 'user' }>): { content: string, badge: string, meta: string } {
     const userMessage = message.message
     let userContent = 'User message'
-    let hasToolResult = false
+    let toolId = ''
 
     if (userMessage.content && Array.isArray(userMessage.content)) {
       const toolResults = userMessage.content
         .filter((block: any) => block.type === 'tool_result')
         .map((block: any) => {
-          const toolInfo = block.tool_use_id ? `Tool: ${block.tool_use_id}` : 'Tool Result'
           const resultContent = block.content ? block.content : 'No content'
-          return `${toolInfo}: ${resultContent}`
+          toolId += block.tool_use_id ? `${block.tool_use_id} ` : ''
+          return resultContent
         })
 
       if (toolResults.length > 0) {
-        hasToolResult = true
         userContent = toolResults.join('\n')
       }
     }
 
-    return { content: HtmlUtils.escapeHtml(userContent), badge: (hasToolResult ? 'tool result' : 'User'), meta: '' }
+    return { content: HtmlUtils.escapeHtml(userContent), badge: (toolId ? toolId : 'User'), meta: '' }
   }
 
   private renderResultMessage(message: Extract<SendMessageResponse, { type: 'result' }>): { content: string, badge: string, meta: string } {
@@ -397,7 +463,20 @@ export class InspectorToolbar extends LitElement {
         content += `<strong>Permission Denials:</strong> ${message.permission_denials.length}<br>`
       }
 
-      return { content, badge: 'Complete', meta: '' }
+      // Build meta information with token usage
+      let metaInfo = ''
+      if (message.usage) {
+        const usage = message.usage
+        const tokens: string[] = []
+        if (usage.input_tokens) tokens.push(`${usage.input_tokens}↑`)
+        if (usage.output_tokens) tokens.push(`${usage.output_tokens}↓`)
+        if (usage.cache_read_input_tokens) tokens.push(`${usage.cache_read_input_tokens}(cached)`)
+        if (tokens.length > 0) {
+          metaInfo = `Tokens: ${tokens.join(' ')}`
+        }
+      }
+
+      return { content, badge: 'Complete', meta: metaInfo }
     }
   }
 
@@ -462,7 +541,13 @@ export class InspectorToolbar extends LitElement {
     const formattedMessage = this.formatMessage(content, badge, meta)
 
     return html`
-      <div class="message" .innerHTML=${formattedMessage}></div>
+      <div class=${classMap({
+        'message': true,
+        'assistant': message.type === 'assistant',
+        'user': message.type === 'user',
+        'system': message.type === 'system',
+        'result': message.type === 'result'
+      })} .innerHTML=${formattedMessage}></div>
     `
   }
 
@@ -665,26 +750,9 @@ export class InspectorToolbar extends LitElement {
 
       this.setProcessingState(true)
 
-      // Capture console messages based on prompt keywords
-      let consoleErrors: string[] | undefined
-      let consoleWarnings: string[] | undefined
-      let consoleInfo: string[] | undefined
-
-      if (prompt.includes('@error')) {
-        consoleErrors = captureConsoleErrors()
-      }
-
-      if (prompt.includes('@warning')) {
-        consoleWarnings = captureConsoleWarnings()
-      }
-
-      if (prompt.includes('@info')) {
-        consoleInfo = captureConsoleInfo()
-      }
-
       const messageHandler: AIMessageHandler = {
         onData: (data: SendMessageResponse) => {
-          console.log(data)
+          console.log(JSON.stringify(data))
 
           // Update session ID from message
           if (data.session_id) {
@@ -719,22 +787,8 @@ export class InspectorToolbar extends LitElement {
         }
       }
 
-      // For now, keep using the existing AI manager method but extend it with console data
-      // We would need to modify the AI manager to handle console data, but for simplicity
-      // we'll add this as additional context to the prompt when console capture keywords are used
-      let enhancedPrompt = prompt
-      if (consoleErrors?.length) {
-        enhancedPrompt += '\n\n**Console Errors:**\n' + consoleErrors.join('\n')
-      }
-      if (consoleWarnings?.length) {
-        enhancedPrompt += '\n\n**Console Warnings:**\n' + consoleWarnings.join('\n')
-      }
-      if (consoleInfo?.length) {
-        enhancedPrompt += '\n\n**Console Info:**\n' + consoleInfo.join('\n')
-      }
-
       await this.aiManager.sendMessage(
-        enhancedPrompt,
+        prompt,
         selectedElements,
         pageInfo,
         this.cwd,
@@ -823,8 +877,7 @@ export class InspectorToolbar extends LitElement {
       return '<strong>TodoWrite</strong>\nInvalid todos format'
     }
 
-    let html = '<div style="margin: 8px 0;"><strong>📋 Todo List</strong></div>'
-    html += '<div style="border-left: 3px solid #007acc; padding-left: 12px; margin: 8px 0;">'
+    let html = '<div>'
 
     todos.forEach(todo => {
       const statusIcon = this.getStatusIcon(todo.status)
@@ -857,10 +910,38 @@ export class InspectorToolbar extends LitElement {
     }
   }
 
+  private getBadgeClass(badge: string): string {
+    const lowerBadge = badge.toLowerCase()
+
+    // System messages
+    if (lowerBadge === 'system') return 'badge-system'
+
+    // Assistant messages
+    if (lowerBadge === 'claude') return 'badge-assistant'
+    if (lowerBadge === 'todo') return 'badge-todo'
+
+    // Tool-specific badges
+    if (lowerBadge.includes('read') || lowerBadge.includes('write') || lowerBadge.includes('edit')) return 'badge-tool-file'
+    if (lowerBadge.includes('bash') || lowerBadge.includes('exec')) return 'badge-tool-exec'
+    if (lowerBadge.includes('search') || lowerBadge.includes('grep') || lowerBadge.includes('glob')) return 'badge-tool-search'
+    if (lowerBadge.includes('web')) return 'badge-tool-web'
+
+    // User messages
+    if (lowerBadge === 'user') return 'badge-user'
+
+    // Result messages
+    if (lowerBadge === 'complete') return 'badge-complete'
+    if (lowerBadge === 'error') return 'badge-error'
+
+    // Default for unknown badges
+    return 'badge-default'
+  }
+
   private formatMessage(content: string, badge?: string, meta?: string): string {
-    const badgeHtml = badge ? `<span class="badge">${badge}</span>` : ''
+    const badgeClass = this.getBadgeClass(badge || '')
+    const badgeHtml = badge ? `<span class="badge ${badgeClass}">${badge}</span>` : ''
     const metaHtml = meta ? `<small class="meta">${meta}</small>` : ''
-    return `${badgeHtml}${content}${metaHtml}`
+    return `${badgeHtml}<div class="message-content">${content}</div>${metaHtml}</div>`
   }
 
   private hashMessage(jsonData: SendMessageResponse): string {

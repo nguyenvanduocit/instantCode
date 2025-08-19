@@ -146,14 +146,15 @@ export function createAIManager(verbose = false): AIManager {
           onData: (data) => {
             logger.log(`📥 [CLIENT ${clientId}] SSE data received:`, data)
 
-            if ((data.type === 'claude_json' || data.type === 'claude_response' || data.type === 'complete') && data.sessionId) {
-              globalSessionId = data.sessionId
+            // Update session ID from any message that contains it
+            if ('session_id' in data && data.session_id) {
+              globalSessionId = data.session_id
             }
 
             handler.onData(data)
 
-            if (data.type === 'complete') {
-              logger.log(`✅ [CLIENT ${clientId}] AI request completed with session ID:`, data.sessionId)
+            if (data.type === 'result') {
+              logger.log(`✅ [CLIENT ${clientId}] AI request completed with session ID:`, data.session_id)
               currentSubscription = null
               handler.onComplete()
             }
