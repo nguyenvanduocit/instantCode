@@ -179,6 +179,8 @@ export function inspectorPlugin(options: InspectorPluginOptions = {}): Plugin {
 
   return {
     name: 'vite-plugin-inspector',
+    // Only apply plugin during development (serve command)
+    apply: 'serve',
 
     configResolved(config: ResolvedConfig) {
       projectRoot = config.root;
