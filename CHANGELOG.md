@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.0](https://github.com/nguyenvanduocit/instantCode/compare/v1.5.0...v1.6.0) (2025-08-19)
+
+
+### Features
+
+* **build:** add TypeScript declaration file generation ([2d49d0e](https://github.com/nguyenvanduocit/instantCode/commit/2d49d0e58a6938dab604980d299720596fe87c98))
+
 ## [1.5.0](https://github.com/nguyenvanduocit/instantCode/compare/v1.4.0...v1.5.0) (2025-08-19)
 
 
