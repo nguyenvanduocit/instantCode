@@ -41,16 +41,15 @@ export const appRouter = router({
 
       ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent connection message`)
 
-      const componentLocations = extractComponentLocationsFromElements(input.selectedElements)
       const formattedPrompt = formatAIPrompt(input.userPrompt, input.selectedElements, input.pageInfo, input.consoleErrors)
 
       ctx.logger.log('Received structured input:', {
-        userPrompt: input.userPrompt.substring(0, 100) + '...',
-        elementsCount: input.selectedElements.length,
+        userPrompt: input.userPrompt,
+        elements: input.selectedElements,
         pageInfo: input.pageInfo,
         sessionId: input.sessionId || 'new session'
       })
-      ctx.logger.log('Extracted component locations:', componentLocations)
+      ctx.logger.log(formattedPrompt)
 
       try {
         // Mock mode: stream deterministic frames for UI/dev without real backend calls
@@ -91,7 +90,8 @@ export const appRouter = router({
           maxTurns: 50,
           executable: "bun",
           cwd: input.cwd,
-          abortController
+          abortController,
+          appendSystemPrompt: "think carefully about user request and provided context, use todolist if the task is complicated"
         }
 
         // Add resumeSessionId if sessionId is provided
@@ -186,22 +186,6 @@ export const appRouter = router({
     }),
 })
 
-function extractComponentLocationsFromElements(elements: ElementData[]): string[] {
-  const componentLocations: string[] = []
-
-  const extractFromElement = (element: ElementData) => {
-    if (element.componentData?.componentLocation) {
-      componentLocations.push(element.componentData.componentLocation)
-    }
-    if (element.children && Array.isArray(element.children)) {
-      element.children.forEach(extractFromElement)
-    }
-  }
-
-  elements.forEach(extractFromElement)
-  return componentLocations
-}
-
 function formatAIPrompt(userPrompt: string, selectedElements: ElementData[], pageInfo: PageInfo, consoleErrors?: string[]): string {
   let formattedPrompt = `<userRequest>${userPrompt}</userRequest>`
 
@@ -217,7 +201,7 @@ function formatAIPrompt(userPrompt: string, selectedElements: ElementData[], pag
   }
 
   if (selectedElements && selectedElements.length > 0) {
-    formattedPrompt += `<selection>//format: filepath:line:column \n\n${JSON.stringify(selectedElements, replacer)}</selection>`
+    formattedPrompt += `<selection>${JSON.stringify(selectedElements, replacer)}</selection>`
   }
 
   if (consoleErrors && consoleErrors.length > 0) {

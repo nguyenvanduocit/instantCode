@@ -242,6 +242,7 @@ export function createElementSelectionManager(): ElementSelectionManager {
           index: data.index,
           tagName: element.tagName,
           xpath: XPathUtils.generateXPath(element),
+          cssSelector: XPathUtils.generateEnhancedCSSSelector(element),
           textContent: element.textContent?.substring(0, 100) || '',
           attributes: Array.from(element.attributes).reduce((acc, attr) => {
             if (attr.name !== 'style') {
