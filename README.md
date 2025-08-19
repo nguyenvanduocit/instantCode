@@ -1,109 +1,173 @@
-# Frontend Context - AI-Powered Web Inspection Tool
+# InstantCode - AI-Powered Web Development Assistant
 
-Transform how you interact with web pages! Frontend Context lets you select any element on a webpage and get instant AI assistance about it. Whether you're building, debugging, or learning about web applications, this tool makes web development more intuitive.
+Get instant AI assistance for any element on your webpage! InstantCode integrates seamlessly with your Vite development workflow, automatically injecting an AI inspector that helps you understand, debug, and improve your code in real-time.
 
-## What is Frontend Context?
+## What is InstantCode?
 
-Frontend Context is a browser inspection tool that brings AI directly to your webpage. Simply click on any element to get intelligent insights, explanations, or help with your frontend development tasks.
+InstantCode is an AI-powered web development tool that lets you click on any element in your application and get intelligent help about it. Perfect for debugging, learning frameworks, or getting suggestions for improvements.
 
 ✨ **Key Benefits:**
-- 🎯 **Point & Click**: Select any element on your webpage
-- 🤖 **AI Assistant**: Get instant help about HTML, CSS, JavaScript, and frameworks
-- 🔍 **Smart Detection**: Automatically detects React, Vue, Angular, Svelte components
-- 💬 **Natural Language**: Ask questions in plain English about your code
-- ⚡ **Real-time**: Get responses instantly without leaving your browser
+- 🎯 **Point & Click**: Select any element to get contextual help
+- 🤖 **AI Assistant**: Powered by Claude Code for intelligent insights
+- 🔍 **Smart Detection**: Auto-detects React, Vue, Angular, Svelte components
+- 💬 **Natural Conversations**: Ask questions in plain English
+- ⚡ **Zero Configuration**: Works out of the box with Vite
+- 🔧 **Development Focused**: Integrates directly into your dev workflow
 
 ## Prerequisites
 
-Before using Frontend Context, you need to have **Claude Code** installed on your machine.
+InstantCode requires **Claude Code** to provide AI assistance:
 
-### Install Claude Code
-
-Frontend Context requires Claude Code to provide AI assistance. Install it using one of these methods:
-
-**Using bun (recommended)**
 ```bash
+# Install Claude Code globally
 bun install -g @anthropic-ai/claude-code
-```
 
-After installation, verify it's working:
-```bash
+# Verify installation
 claude --version
 ```
 
-For more installation options and troubleshooting, visit: https://docs.anthropic.com/en/docs/claude-code
+## Quick Start with Vite
 
-## Getting Started
+The fastest way to get started is using our Vite plugin. This automatically handles everything for you!
 
-### Step 1: Navigate to Your Project Directory
-
-**Important**: Run InstantCode from your project's working directory to automatically provide AI context about your codebase.
+### 1. Install InstantCode
 
 ```bash
-# Navigate to your project folder first
+npm install --save-dev instantcode
+# or
+bun add -d instantcode
+# or  
+yarn add -D instantcode
+```
+
+### 2. Add to Your Vite Config
+
+Add the plugin to your `vite.config.ts` or `vite.config.js`:
+
+```typescript
+import { defineConfig } from 'vite';
+import inspectorPlugin from 'instantcode/vite-plugin';
+
+export default defineConfig({
+  plugins: [
+    // Your existing plugins...
+    inspectorPlugin(),
+  ],
+});
+```
+
+### 3. Start Your Dev Server
+
+```bash
+npm run dev
+# or
+bun dev
+# or
+yarn dev
+```
+
+That's it! The InstantCode toolbar will automatically appear in your application.
+
+### 4. Start Getting Help!
+
+1. **Look for the toolbar** - appears as a small widget in your app
+2. **Click "Select Element"** to enter selection mode
+3. **Click any element** you want help with
+4. **Ask questions** like:
+   - "How do I change this component's styling?"
+   - "Why isn't this button working?"
+   - "How can I make this responsive?"
+   - "What props does this component accept?"
+
+
+For installation help, visit: https://docs.anthropic.com/en/docs/claude-code
+
+## Plugin Configuration
+
+The Vite plugin accepts these options:
+
+```typescript
+inspectorPlugin({
+  verbose: false,  // Enable detailed logging (default: false)
+})
+```
+
+**Note**: The server automatically runs on port 7318 and auto-injects the toolbar - no additional configuration needed!
+
+## What Happens When You Use the Plugin?
+
+When you add InstantCode to your Vite project:
+
+1. **🚀 Auto-Start**: Inspector server starts automatically with `vite dev`
+2. **💉 Auto-Inject**: Toolbar is automatically added to your app
+3. **🎯 Smart Context**: AI understands your project structure and codebase
+4. **🛑 Clean Shutdown**: Server stops gracefully when you stop Vite
+5. **🔄 Hot Reload**: Maintains connection during HMR updates
+
+## Framework Support
+
+InstantCode works with all Vite-supported frameworks:
+
+- ⚛️ **React** - Detects components, props, and state
+- 🟢 **Vue** - Understands composition/options API
+- 🅰️ **Angular** - Recognizes components and directives  
+- 🟠 **Svelte** - Identifies components and stores
+- 📄 **Vanilla JS** - Works with plain HTML/CSS/JS
+
+## Advanced Usage - Manual Setup
+
+If you prefer manual control or aren't using Vite:
+
+### Run Standalone Server
+
+```bash
+# Navigate to your project directory first (important for context!)
 cd /path/to/your/project
 
-# Then run InstantCode - no installation needed!
+# Start the server
 bunx instantcode@latest
 ```
 
-This will:
-- Start the server on port 7318
-- Display setup instructions
-- Automatically detect your project structure and provide better AI assistance
+### Add Script Manually
 
-### Step 2: Add to Your Website
-
-Add this simple script tag to you index.html:
+Add to your HTML:
 
 ```html
 <script src="http://localhost:7318/inspector-toolbar.js"></script>
 ```
 
-That's it! The toolbar will automatically appear on your page.
-
-### Step 3: Start Inspecting!
-
-1. **Refresh your webpage** - you'll see a small toolbar appear
-2. **Click the "Select Element" button** 
-3. **Click on any element** you want to learn about
-4. **Ask questions** like:
-   - "What does this button do?"
-   - "How can I change the color?"
-   - "Why isn't this centered?"
-   - "How do I make this responsive?"
-
 ## Troubleshooting
 
+### Plugin Not Working?
+1. Make sure you're running `npm run dev` (or equivalent)
+2. Check that InstantCode is in your `vite.config.ts`
+3. Restart your dev server
+4. Check console for error messages
+
 ### Toolbar Not Appearing?
-1. Check that the server is running on port 7318
-2. Make sure the script tag is added to your HTML
-3. Check browser console for any error messages
+1. Ensure Vite dev server is running
+2. Check browser console for errors
+3. Verify port 7318 isn't blocked
 4. Try refreshing the page
 
-### Server Won't Start?
-1. Make sure port 7318 isn't already in use
-2. Check that you have Bun installed: `bun --version`
-3. Try a different port: `PORT=8080 bunx instantcode`
+### AI Responses Not Helpful?
+1. **Run from your project root** - this gives AI better context
+2. Be specific about what you want to achieve
+3. Select the exact element you're asking about
+4. Try rephrasing your question
 
-### Not Getting Good AI Responses?
-1. **Make sure you ran `bunx instantcode` from your project directory** - this is crucial for AI context
-2. Try being more specific in your questions
-3. Make sure you're selecting the right element
+### Port 7318 Already In Use?
+The server automatically checks port availability. If you see this error:
+1. Stop any existing InstantCode servers
+2. Check what's using port 7318: `lsof -i :7318`
+3. Kill the process or restart your machine
 
-## Tips for Better Results
+## Tips for Best Results
 
-- **Always run from your project directory** for better AI context
-- Ask specific questions about what you want to achieve
-- Select the exact element you're curious about
-- Try questions like "How do I..." or "Why does this..."
-
-## Support
-
-Having issues? Found a bug? Want to suggest a feature?
-- Check the console for error messages
-- Make sure you're using the latest version
-- Ask the AI assistant itself - it can help debug issues!
+- 🎯 **Be Specific**: "How do I center this div?" vs "Fix this"
+- 📁 **Project Context**: Always run from your project directory
+- 🎨 **Element Selection**: Click the exact element you're asking about
+- 💭 **Clear Questions**: Ask what you want to accomplish, not just what's broken
 
 ---
 

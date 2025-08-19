@@ -32,11 +32,7 @@ export type ToolbarInternalEvents = {
   // Prompt Events
   'prompt:submit': { prompt: string }
   'prompt:clear': void
-  
-  // Token Counter Events
-  'tokens:increment': { inputTokens: number; outputTokens: number; cacheReadTokens: number }
-  'tokens:reset': void
-  
+
   // Notification Events
   'notification:show': { message: string; type: 'success' | 'error' | 'info' }
 }

@@ -18,6 +18,95 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - **Lint and format**: Use `bun run typecheck` to verify TypeScript compilation
 - **Check port availability**: The server automatically checks if port 7318 is available before starting
 
+
+## Development Setup
+
+### Local Development Workflow
+
+#### 1. Start the Standalone Server (Manual)
+When developing the inspector itself or testing with existing projects:
+
+```bash
+# In the standalone-server directory
+bun src/index.ts
+```
+
+This starts the server on port 7318 without any project integration.
+
+#### 2. Build the Inspector Toolbar
+The browser component needs to be built before use:
+
+```bash
+# Build the inspector toolbar component
+bun run build:inspector
+
+# Or build everything (server + inspector + vite plugin)
+bun run build
+```
+
+#### 3. Using Local Development Plugin
+To use the local development version of the Vite plugin in another project:
+
+**Example: Using in `/Volumes/Data/Projects/epub-manager`**
+
+```typescript
+// In epub-manager/vite.config.ts
+import { defineConfig } from 'vite';
+// Import directly from source - the plugin auto-detects development mode
+import inspectorPlugin from '/Volumes/Data/Projects/frontendContext/standalone-server/src/vite-plugin.ts';
+
+export default defineConfig({
+  plugins: [
+    inspectorPlugin({
+      verbose: true,
+    }),
+  ],
+});
+```
+
+**Note**: The plugin automatically detects if it's being imported from source (`src/`) or from the installed package (`dist/`) and runs the appropriate server file.
+
+**Alternative: Link for Development**
+```bash
+# In standalone-server directory
+bun run build
+bun link
+
+# In epub-manager directory  
+bun link instantcode
+
+# Then use normally in vite.config.ts
+import inspectorPlugin from 'instantcode/vite-plugin';
+```
+
+#### 4. Development Server Commands
+```bash
+# Start epub-manager with inspector integration
+cd /Volumes/Data/Projects/epub-manager
+npm run dev  # or bun dev
+
+# The inspector server will auto-start and toolbar will be injected
+# Visit your app and see the inspector toolbar in the bottom-right
+```
+
+### Development Notes
+- **Port Management**: Port is fixed at 7318. Ensure this port is available before running
+- **Environment Variables**: The server respects `INSPECTOR_PORT` and `PORT` environment variables
+- **Auto-Detection**: The plugin automatically detects if it should run the dev server (`bun src/index.ts`) or production build (`bun dist/index.js`)
+- **Project Context**: The plugin passes the project root directory to the inspector for better file path resolution
+- **Hot Reload**: The inspector maintains connection during Vite HMR updates
+- **ES Modules**: The plugin is built as ES modules for compatibility with modern Vite configurations
+
+### Troubleshooting
+
+#### Port Conflicts
+If you see "Port 7318 is already in use":
+1. Stop the existing process on port 7318
+2. The port is fixed at 7318 and cannot be changed via plugin options
+
+#### Module Format Issues
+The plugin is built as ES modules. If you encounter import issues, ensure your project supports ESM or use the compiled version from `dist/vite-plugin.js`.
+
 ## Architecture
 
 ### Core Server Components

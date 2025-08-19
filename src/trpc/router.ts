@@ -26,33 +26,33 @@ export const appRouter = router({
     timestamp: new Date().toISOString(),
   })),
 
-  newChat: publicProcedure.mutation(() => {
-    console.log('New chat initiated')
+  newChat: publicProcedure.mutation(({ ctx }) => {
+    ctx.logger.log('New chat initiated')
     return { message: 'New chat initiated' }
   }),
 
   sendMessage: publicProcedure
     .input(StructuredMessageSchema)
-    .subscription(async function* ({ input, signal }) {
+    .subscription(async function* ({ input, signal, ctx }) {
       const subscriptionId = Math.random().toString(36).substring(7)
-      console.log(`🔵 [SERVER] New subscription created: ${subscriptionId} for session: ${input.sessionId || 'new'}`)
+      ctx.logger.log(`🔵 [SERVER] New subscription created: ${subscriptionId} for session: ${input.sessionId || 'new'}`)
       
       yield {
         type: 'connection',
         message: 'Connected to Frontend Context',
       } as SendMessageResponse
-      console.log(`📤 [SERVER ${subscriptionId}] Sent connection message`)
+      ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent connection message`)
 
       const componentLocations = extractComponentLocationsFromElements(input.selectedElements)
       const formattedPrompt = formatAIPrompt(input.userPrompt, input.selectedElements, input.pageInfo, input.consoleErrors)
 
-      console.log('Received structured input:', {
+      ctx.logger.log('Received structured input:', {
         userPrompt: input.userPrompt.substring(0, 100) + '...',
         elementsCount: input.selectedElements.length,
         pageInfo: input.pageInfo,
         sessionId: input.sessionId || 'new session'
       })
-      console.log('Extracted component locations:', componentLocations)
+      ctx.logger.log('Extracted component locations:', componentLocations)
 
       if (componentLocations.length > 0) {
         const progressMsg = {
@@ -61,14 +61,14 @@ export const appRouter = router({
           componentLocations,
         } as SendMessageResponse
         yield progressMsg
-        console.log(`📤 [SERVER ${subscriptionId}] Sent progress message: Found ${componentLocations.length} component(s)`)
+        ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent progress message: Found ${componentLocations.length} component(s)`)
       } else {
         const progressMsg = {
           type: 'progress',
           message: 'No component locations found in elements',
         } as SendMessageResponse
         yield progressMsg
-        console.log(`📤 [SERVER ${subscriptionId}] Sent progress message: No components found`)
+        ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent progress message: No components found`)
       }
 
       // Process with Claude Code
@@ -80,7 +80,7 @@ export const appRouter = router({
           message: 'Processing with Claude...',
         } as SendMessageResponse
         yield processingMsg
-        console.log(`📤 [SERVER ${subscriptionId}] Sent processing message`)
+        ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent processing message`)
 
         const abortController = new AbortController()
         
@@ -131,7 +131,7 @@ export const appRouter = router({
             sessionId: currentSessionId,
           } as SendMessageResponse
           yield claudeMsg
-          console.log(`📤 [SERVER ${subscriptionId}] Sent claude_json message: ${message.type}`)
+          ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent claude_json message: ${message.type}`)
 
           if (message.type === "result" && !message.is_error) {
             yield {
@@ -169,11 +169,11 @@ export const appRouter = router({
           sessionId: currentSessionId,
         } as SendMessageResponse
         yield completeMsg
-        console.log(`📤 [SERVER ${subscriptionId}] Sent completion message`)
+        ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent completion message`)
       } catch (error) {
         // Check if the error is due to cancellation
         if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('aborted'))) {
-          console.log(`🚫 [SERVER ${subscriptionId}] Claude processing was cancelled`)
+          ctx.logger.log(`🚫 [SERVER ${subscriptionId}] Claude processing was cancelled`)
           yield {
             type: 'progress',
             message: 'Request was cancelled',
@@ -186,9 +186,9 @@ export const appRouter = router({
             componentLocations,
             sessionId: currentSessionId,
           } as SendMessageResponse
-          console.log(`📤 [SERVER ${subscriptionId}] Sent cancellation messages`)
+          ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent cancellation messages`)
         } else {
-          console.error(`❌ [SERVER ${subscriptionId}] Claude processing error:`, error)
+          ctx.logger.error(`❌ [SERVER ${subscriptionId}] Claude processing error:`, error)
           
           yield {
             type: 'progress',
@@ -202,11 +202,11 @@ export const appRouter = router({
             componentLocations,
             sessionId: currentSessionId,
           } as SendMessageResponse
-          console.log(`📤 [SERVER ${subscriptionId}] Sent error messages`)
+          ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent error messages`)
         }
       }
       
-      console.log(`🔴 [SERVER] Subscription ${subscriptionId} ended`)
+      ctx.logger.log(`🔴 [SERVER] Subscription ${subscriptionId} ended`)
     }),
 
   processElements: publicProcedure

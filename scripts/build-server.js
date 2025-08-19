@@ -7,7 +7,7 @@ const rootDir = path.join(__dirname, '..')
 esbuild.build({
   entryPoints: [path.join(rootDir, 'src/index.ts')],
   bundle: true,
-  outfile: path.join(rootDir, 'dist/index.js'),
+  outfile: path.join(rootDir, 'dist/index.cjs'),
   platform: 'node',
   target: 'node18',
   format: 'cjs',

@@ -3,7 +3,6 @@ name: Release Please
 on:
   push:
     branches:
-      - main
       - master
 
 permissions:
@@ -57,7 +56,6 @@ jobs:
         run: |
           tar -czf instantcode-${{ needs.release-please.outputs.tag_name }}.tar.gz \
             dist/ \
-            res/ \
             package.json \
             README.md
             

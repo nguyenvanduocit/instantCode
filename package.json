@@ -2,15 +2,24 @@
   "name": "instantcode",
   "version": "1.4.0",
   "description": "AI-powered web inspection tool - Pick elements and get instant AI assistance",
-  "main": "dist/index.js",
+  "type": "module",
+  "main": "dist/index.cjs",
   "bin": {
-    "instantcode": "./dist/index.js"
+    "instantcode": "./dist/index.cjs"
+  },
+  "exports": {
+    ".": "./dist/index.cjs",
+    "./vite-plugin": {
+      "import": "./dist/vite-plugin.js",
+      "types": "./src/vite-plugin.ts"
+    }
   },
   "scripts": {
     "dev": "bun src/index.ts",
     "build:server": "bun scripts/build-server.js",
     "build:inspector": "bun scripts/build-inspector.js",
-    "build": "bun run build:server && bun run build:inspector",
+    "build:vite-plugin": "bun scripts/build-vite-plugin.js",
+    "build": "bun run build:server && bun run build:inspector && bun run build:vite-plugin",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "bun run build"
   },
@@ -59,9 +68,13 @@
     "@types/ws": "^8.18.1",
     "esbuild": "^0.25.9",
     "tsx": "^4.7.0",
-    "typescript": "^5.7.3"
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7"
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "peerDependencies": {
+    "vite": ">=2.0.0"
   }
 }

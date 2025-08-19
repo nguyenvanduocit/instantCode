@@ -12,11 +12,6 @@ export interface ToolbarState {
   sessionId: string | null
   selectedElements: ElementData[]
   messages: SendMessageResponse[]
-  tokenCounts: {
-    inputTokens: number
-    outputTokens: number
-    cacheReadTokens: number
-  }
 }
 
 export interface ToolbarStateManager {
@@ -27,7 +22,6 @@ export interface ToolbarStateManager {
   getSessionId(): string | null
   getSelectedElements(): ElementData[]
   getMessages(): SendMessageResponse[]
-  getTokenCounts(): { inputTokens: number, outputTokens: number, cacheReadTokens: number }
   destroy(): void
 }
 
@@ -39,11 +33,6 @@ export function createToolbarStateManager(eventEmitter: ToolbarEventEmitter): To
     sessionId: null,
     selectedElements: [],
     messages: [],
-    tokenCounts: {
-      inputTokens: 0,
-      outputTokens: 0,
-      cacheReadTokens: 0
-    }
   }
 
   const cleanupFunctions: (() => void)[] = []
@@ -109,11 +98,6 @@ export function createToolbarStateManager(eventEmitter: ToolbarEventEmitter): To
         state.sessionId = null
         state.selectedElements = []
         state.messages = []
-        state.tokenCounts = {
-          inputTokens: 0,
-          outputTokens: 0,
-          cacheReadTokens: 0
-        }
         onStateChange()
       })
     )
@@ -176,10 +160,6 @@ export function createToolbarStateManager(eventEmitter: ToolbarEventEmitter): To
 
     getMessages(): SendMessageResponse[] {
       return [...state.messages]
-    },
-
-    getTokenCounts(): { inputTokens: number, outputTokens: number, cacheReadTokens: number } {
-      return { ...state.tokenCounts }
     },
 
     destroy(): void {

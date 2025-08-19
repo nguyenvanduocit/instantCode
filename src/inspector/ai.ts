@@ -23,6 +23,7 @@ import {
   captureConsoleWarnings, 
   captureConsoleInfo 
 } from './console'
+import { createLogger } from './logger'
 
 export interface AIMessageHandler {
   onData: (data: SendMessageResponse) => void
@@ -47,7 +48,8 @@ export interface AIManager {
   destroy(): void
 }
 
-export function createAIManager(): AIManager {
+export function createAIManager(verbose = false): AIManager {
+  const logger = createLogger(verbose)
   let trpcClient: ReturnType<typeof createTRPCProxyClient<AppRouter>> | null = null
   let wsClient: ReturnType<typeof createWSClient> | null = null
   let currentSubscription: any = null
@@ -101,12 +103,12 @@ export function createAIManager(): AIManager {
       }
 
       if (currentSubscription) {
-        console.log(`🟡 [CLIENT ${clientId}] Cancelling existing subscription before creating new one`)
+        logger.log(`🟡 [CLIENT ${clientId}] Cancelling existing subscription before creating new one`)
         currentSubscription.unsubscribe()
         currentSubscription = null
       }
 
-      console.log(`🟢 [CLIENT ${clientId}] Creating new subscription for prompt: "${userPrompt.substring(0, 30)}..."`)
+      logger.log(`🟢 [CLIENT ${clientId}] Creating new subscription for prompt: "${userPrompt.substring(0, 30)}..."`)
 
       // Capture console messages based on prompt keywords
       let consoleErrors: string[] | undefined
@@ -136,13 +138,13 @@ export function createAIManager(): AIManager {
         consoleInfo
       }
 
-      console.log('structuredInput', structuredInput)
+      logger.log('structuredInput', structuredInput)
 
       const subscription = trpcClient.sendMessage.subscribe(
         structuredInput,
         {
           onData: (data) => {
-            console.log(`📥 [CLIENT ${clientId}] SSE data received:`, data)
+            logger.log(`📥 [CLIENT ${clientId}] SSE data received:`, data)
 
             if ((data.type === 'claude_json' || data.type === 'claude_response' || data.type === 'complete') && data.sessionId) {
               globalSessionId = data.sessionId
@@ -151,13 +153,13 @@ export function createAIManager(): AIManager {
             handler.onData(data)
 
             if (data.type === 'complete') {
-              console.log(`✅ [CLIENT ${clientId}] AI request completed with session ID:`, data.sessionId)
+              logger.log(`✅ [CLIENT ${clientId}] AI request completed with session ID:`, data.sessionId)
               currentSubscription = null
               handler.onComplete()
             }
           },
           onError: (error) => {
-            console.error(`❌ [CLIENT ${clientId}] Subscription error:`, error)
+            logger.error(`❌ [CLIENT ${clientId}] Subscription error:`, error)
             currentSubscription = null
             handler.onError(error)
           },
@@ -173,18 +175,18 @@ export function createAIManager(): AIManager {
           await trpcClient.newChat.mutate()
           globalSessionId = null
         } catch (error) {
-          console.error('Failed to start new chat:', error)
+          logger.error('Failed to start new chat:', error)
           throw error
         }
       } else {
-        console.warn('tRPC client not initialized')
+        logger.warn('tRPC client not initialized')
         throw new Error('tRPC client not initialized')
       }
     },
 
     cancel(): void {
       if (currentSubscription) {
-        console.log('Cancelling current AI request')
+        logger.log('Cancelling current AI request')
         currentSubscription.unsubscribe()
         currentSubscription = null
       }
