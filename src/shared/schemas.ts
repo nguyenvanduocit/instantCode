@@ -30,54 +30,93 @@ export const StructuredMessageSchema = z.object({
   consoleInfo: z.array(z.string()).optional(),
 })
 
-export const SendMessageResponseSchema = z.discriminatedUnion('type', [
+
+export const SendMessageResponseSchema = z.union([
+// Claude Code message types - detailed schemas based on actual data
+
+// 'system' message type
   z.object({
-    type: z.literal('connection'),
-    message: z.string(),
+    type: z.literal('system'),
+    subtype: z.literal('init'),
+    cwd: z.string(),
+    session_id: z.string(),
+    apiKeySource: z.string(), // e.g. "none"
+    mcp_servers: z.array(z.object({
+      name: z.string(),
+      status: z.string(),
+    })),
+    model: z.string(), // e.g. "claude-opus-4-1-20250805"
+    permissionMode: z.string(), // e.g. "bypassPermissions"
+    slash_commands: z.array(z.string()),
+    tools: z.array(z.string()),
   }),
+
+  // 'assistant' message type  
   z.object({
-    type: z.literal('progress'),
-    message: z.string(),
-    componentLocations: z.array(z.string()).optional(),
-  }),
-  z.object({
-    type: z.literal('complete'),
-    message: z.string(),
-    prompt: z.string().optional(),
-    componentLocations: z.array(z.string()).optional(),
-    sessionId: z.string().optional(),
-  }),
-  z.object({
-    type: z.literal('claude_response'),
-    message: z.string(),
-    claudeResponse: z.object({
-      result: z.string().optional(),
-      duration_ms: z.number().optional(),
-      duration_api_ms: z.number().optional(),
-      num_turns: z.number().optional(),
-      total_cost_usd: z.number().optional(),
-      session_id: z.string().optional(),
+    type: z.literal('assistant'),
+    message: z.object({
+      id: z.string(),
+      type: z.literal('message'),
+      role: z.literal('assistant'),
+      model: z.string(),
+      content: z.array(z.object({
+        type: z.string(),
+        text: z.string().optional(),
+        id: z.string().optional(),
+        name: z.string().optional(),
+        input: z.record(z.string(), z.unknown()).optional(),
+      })),
+      stop_reason: z.string().nullable().optional(),
+      stop_sequence: z.string().nullable().optional(),
       usage: z.object({
-        input_tokens: z.number().optional(),
+        input_tokens: z.number(),
         cache_creation_input_tokens: z.number().optional(),
         cache_read_input_tokens: z.number().optional(),
-        output_tokens: z.number().optional(),
-        server_tool_use: z.object({
-          web_search_requests: z.number().optional(),
-        }).optional(),
-        service_tier: z.string().optional(),
+        output_tokens: z.number(),
       }).optional(),
-      is_error: z.boolean().optional(),
-      subtype: z.string().optional(),
-      permission_denials: z.array(z.any()).optional(),
-    }).optional(),
-    sessionId: z.string().optional(),
+    }),
+    parent_tool_use_id: z.string().nullable(),
+    session_id: z.string(),
   }),
+
+  // 'user' message type
   z.object({
-    type: z.literal('claude_json'),
-    message: z.string(),
-    claudeJson: z.any().optional(),
-    sessionId: z.string().optional(),
+    type: z.literal('user'),
+    message: z.object({
+      role: z.literal('user'),
+      content: z.array(z.object({
+        type: z.string(), // e.g. "tool_result"
+        content: z.string().optional(),
+        tool_use_id: z.string().optional(),
+      })),
+    }),
+    parent_tool_use_id: z.string().nullable(),
+    session_id: z.string(),
+  }),
+
+  // 'result' message type
+  z.object({
+    type: z.literal('result'),
+    // Allow any subtype string; server will use 'error' for errors
+    subtype: z.string(),
+    is_error: z.boolean(),
+    duration_ms: z.number(),
+    duration_api_ms: z.number(),
+    num_turns: z.number().optional(),
+    result: z.string().optional(),
+    session_id: z.string(),
+    total_cost_usd: z.number().optional(),
+    usage: z.object({
+      input_tokens: z.number(),
+      cache_creation_input_tokens: z.number().optional(),
+      cache_read_input_tokens: z.number().optional(),
+      output_tokens: z.number(),
+    }).optional(),
+    permission_denials: z.array(z.object({
+      tool_name: z.string(),
+      tool_use_id: z.string(),
+      tool_input: z.record(z.string(), z.unknown()),
+    })).optional(),
   }),
 ])
 
