@@ -5,12 +5,33 @@ export const ElementDataSchema = z.object({
   index: z.number(),
   tagName: z.string(),
   xpath: z.string(),
+  cssSelector: z.string(),
   textContent: z.string(),
   attributes: z.record(z.string(), z.string()),
   children: z.array(z.any()),
   componentData: z.object({
     componentLocation: z.string(),
     componentName: z.string().optional(),
+    // Enhanced element-specific location data
+    elementLocation: z.object({
+      file: z.string(),
+      line: z.number(),
+      column: z.number(),
+      endLine: z.number().optional(),
+      endColumn: z.number().optional(),
+      source: z.string().optional(), // The actual source code of this element
+    }).optional(),
+    // Framework-specific metadata
+    framework: z.enum(['vue', 'react', 'angular', 'svelte', 'vanilla']).optional(),
+    // Source map data for precise mapping
+    sourceMap: z.object({
+      originalLine: z.number(),
+      originalColumn: z.number(),
+      originalSource: z.string(),
+      originalName: z.string().optional(),
+    }).optional(),
+    // Element hierarchy in source (e.g., "Button > .content > span")
+    sourceHierarchy: z.string().optional(),
   }).optional(),
 })
 
