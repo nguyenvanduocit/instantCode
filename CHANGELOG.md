@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.0](https://github.com/nguyenvanduocit/instantCode/compare/v1.8.0...v1.9.0) (2025-08-19)
+
+
+### Features
+
+* **inspector:** enhance component detection with React support and source mapping ([7cf34f9](https://github.com/nguyenvanduocit/instantCode/commit/7cf34f9e75f9c2cfd01eac5ea4a0a71fddb520ca))
+
 ## [1.8.0](https://github.com/nguyenvanduocit/instantCode/compare/v1.7.0...v1.8.0) (2025-08-19)
 
 
