@@ -14,10 +14,8 @@ import { createElementSelectionManager, type ElementSelectionManager } from './i
 import { createInspectionManager, type InspectionManager } from './inspector/inspection'
 import { findNearestComponent } from './inspector/detectors'
 import { createLogger, type Logger } from './inspector/logger'
-import { createToolbarEventEmitter } from './inspector/events'
 import { TOOLBAR_STYLES } from './inspector/style'
 import { HtmlUtils } from './utils/html'
-import * as yaml from 'js-yaml'
 import { 
   initializeConsoleErrorCapture, 
   captureConsoleErrors, 
@@ -33,68 +31,54 @@ const CONFIG = {
   MESSAGE_HISTORY_LIMIT: 10
 } as const
 
-// Message formatter interface
-interface MessageFormatter {
-  formatPrompt(userPrompt: string, selectedElements: ElementData[], pageInfo: PageInfo): string
-  shouldShowMessage(jsonData: any): boolean
-  createMessage(data: any): string | null
-  clearMessages(): void
-}
 
 @customElement('inspector-toolbar')
 export class InspectorToolbar extends LitElement {
-  // Reactive properties
-  @property({ attribute: 'ai-endpoint' })
-  aiEndpoint = ''
 
-  @property({ type: string })
-  cwd = ''
+  @property({ attribute: 'ai-endpoint' })
+  private accessor aiEndpoint!: string
+
+  @property({ type: String })
+  private accessor cwd: string
 
   @property({ type: Boolean })
-  verbose = false
+  private accessor verbose: boolean
 
   // Internal state - all managed through Lit's reactive properties
   @state()
-  private isExpanded = false
+  private accessor isExpanded: boolean
 
   @state()
-  private isInspecting = false
+  private accessor isInspecting: boolean
 
   @state()
-  private isProcessing = false
+  private accessor isProcessing: boolean
 
   @state()
-  private sessionId = ''
+  private accessor sessionId: string
 
   @state()
-  private selectedElements: ElementData[] = []
+  private accessor hasSelectedElements: boolean
 
   @state()
-  private hasSelectedElements = false
+  private accessor messages: SendMessageResponse[]
 
   @state()
-  private messages: SendMessageResponse[] = []
+  private accessor showInitiatingIndicator: boolean
 
   @state()
-  private showProcessingIndicator = false
-
-  @state()
-  private showProcessingMessage = false
+  private accessor showProcessingMessage: boolean
 
   // Managers
-  private events = createToolbarEventEmitter()
   private selectionManager: ElementSelectionManager
   private aiManager: AIManager
   private inspectionManager: InspectionManager
-  private messageFormatter: MessageFormatter
   private logger: Logger
 
   // Element refs
   private promptInputRef: Ref<HTMLTextAreaElement> = createRef()
   private jsonContentRef: Ref<HTMLDivElement> = createRef()
 
-  // Event cleanup functions
-  private cleanupFunctions: (() => void)[] = []
 
   // Message formatter state
   private lastMessageHash = ''
@@ -104,6 +88,19 @@ export class InspectorToolbar extends LitElement {
 
   constructor() {
     super()
+
+    // Initialize property defaults
+    this.aiEndpoint = ''
+    this.cwd = ''
+    this.verbose = false
+    this.isExpanded = false
+    this.isInspecting = false
+    this.isProcessing = false
+    this.sessionId = ''
+    this.hasSelectedElements = false
+    this.messages = []
+    this.showInitiatingIndicator = false
+    this.showProcessingMessage = false
 
     // Initialize logger first
     this.logger = createLogger(this.verbose)
@@ -119,96 +116,72 @@ export class InspectorToolbar extends LitElement {
       (element) => this.shouldIgnoreElement(element),
       (element) => this.selectionManager.hasElement(element)
     )
-    
-    // Create inline message formatter
-    this.messageFormatter = {
-      formatPrompt: (userPrompt, selectedElements, pageInfo) => 
-        this.formatPrompt(userPrompt, selectedElements, pageInfo),
-      shouldShowMessage: (jsonData) => this.shouldShowMessage(jsonData),
-      createMessage: (data) => this.createMessage(data),
-      clearMessages: () => this.clearMessages()
+
+  }
+
+  // Helper methods to replace event emissions with direct property updates
+  private expandToolbar(): void {
+    this.isExpanded = true
+  }
+
+  private collapseToolbar(): void {
+    this.isExpanded = false
+    this.isInspecting = false
+  }
+
+  private enterInspectionModeInternal(): void {
+    this.enterInspectionMode()
+    this.isInspecting = true
+  }
+
+  private exitInspectionModeInternal(): void {
+    this.exitInspectionMode()
+    this.isInspecting = false
+  }
+
+  private startProcessing(): void {
+    this.isProcessing = true
+    this.isInspecting = false
+  }
+
+  private endProcessing(): void {
+    this.isProcessing = false
+  }
+
+  private updateSessionId(sessionId: string | null): void {
+    this.sessionId = sessionId || ''
+  }
+
+
+
+  private addMessage(message: SendMessageResponse): void {
+    this.messages = [...this.messages, message]
+
+    // Auto-scroll to bottom
+    this.updateComplete.then(() => {
+      if (this.jsonContentRef.value) {
+        this.jsonContentRef.value.scrollTop = this.jsonContentRef.value.scrollHeight
+      }
+    })
+  }
+
+  private clearMessagesInternal(): void {
+    this.messages = []
+    this.lastMessageHash = ''
+    this.messageHistory.clear()
+  }
+
+  private clearPrompt(): void {
+    if (this.promptInputRef.value) {
+      this.promptInputRef.value.value = ''
     }
-
-    this.setupEventListeners()
   }
 
-  private setupEventListeners(): void {
-    // Listen to state changes and update reactive properties directly
-    this.cleanupFunctions.push(
-      this.events.on('ui:expand', () => {
-        this.isExpanded = true
-      }),
-      this.events.on('ui:collapse', () => {
-        this.isExpanded = false
-        this.isInspecting = false
-      }),
-      this.events.on('ui:enter-inspection', () => {
-        this.enterInspectionMode()
-        this.isInspecting = true
-      }),
-      this.events.on('ui:exit-inspection', () => {
-        this.exitInspectionMode()
-        this.isInspecting = false
-      }),
-      this.events.on('ui:processing-start', () => {
-        this.isProcessing = true
-        this.isInspecting = false
-      }),
-      this.events.on('ui:processing-end', () => {
-        this.isProcessing = false
-      }),
-      this.events.on('session:updated', ({ sessionId }) => {
-        this.sessionId = sessionId || ''
-      }),
-      this.events.on('session:new', () => {
-        this.sessionId = ''
-        this.selectedElements = []
-        this.messages = []
-      }),
-      this.events.on('selection:changed', (elements) => {
-        this.selectedElements = elements || []
-        this.hasSelectedElements = this.selectionManager.getSelectedCount() > 0
-      }),
-      this.events.on('messages:add', (message) => {
-        this.messages = [...this.messages, message]
-        
-        // Update session ID from messages
-        if ((message.type === 'claude_json' || message.type === 'claude_response' || message.type === 'complete') && message.sessionId) {
-          this.sessionId = message.sessionId
-        }
-        
-        // End processing when complete
-        if (message.type === 'complete') {
-          this.isProcessing = false
-        }
-        
-        // Auto-scroll to bottom
-        this.updateComplete.then(() => {
-          if (this.jsonContentRef.value) {
-            this.jsonContentRef.value.scrollTop = this.jsonContentRef.value.scrollHeight
-          }
-        })
-      }),
-      this.events.on('messages:clear', () => {
-        this.messages = []
-        this.messageFormatter.clearMessages()
-      }),
-      this.events.on('prompt:clear', () => {
-        if (this.promptInputRef.value) {
-          this.promptInputRef.value.value = ''
-        }
-      }),
-      this.events.on('selection:clear', () => {
-        this.selectionManager.clearAllSelections()
-        this.selectedElements = []
-        this.hasSelectedElements = false
-      }),
-      this.events.on('notification:show', ({ message, type }) => {
-        // Simple console notification for now
-        console.log(`${type}: ${message}`)
-      }),
-    )
+  private clearSelection(): void {
+    this.selectionManager.clearAllSelections()
+    this.hasSelectedElements = false
   }
+
 
   render() {
     return html`
@@ -281,7 +254,7 @@ export class InspectorToolbar extends LitElement {
           `)}
         </div>
 
-        ${when(this.showProcessingIndicator, () => html`
+        ${when(this.showInitiatingIndicator, () => html`
           <div class="processing-indicator show">
             <div>Starting Claude Code<span class="processing-dots"></span></div>
           </div>
@@ -304,20 +277,192 @@ export class InspectorToolbar extends LitElement {
     `
   }
 
+  private renderSystemMessage(message: Extract<SendMessageResponse, { type: 'system' }>): { content: string, badge: string, meta: string } {
+    const content = `<strong>Model:</strong> ${message.model}<br>`
+      + `<strong>Permission Mode:</strong> ${message.permissionMode}<br>`
+      + `<strong>Working Directory:</strong> ${message.cwd}<br>`
+      + `<strong>API Key Source:</strong> ${message.apiKeySource}<br>`
+      + (message.tools?.length ? `<strong>Available Tools:</strong> ${message.tools.length} tools<br><small>${message.tools.slice(0, 5).join(', ')}${message.tools.length > 5 ? '...' : ''}</small><br>` : '')
+      + (message.mcp_servers?.length ? `<strong>MCP Servers:</strong> ${message.mcp_servers.length}<br>${message.mcp_servers.map((server: any) => `<small>• ${server.name} (${server.status})</small>`).join('<br>')}<br>` : '')
+      + (message.slash_commands?.length ? `<strong>Slash Commands:</strong> ${message.slash_commands.length}<br>` : '')
+
+    return { content, badge: 'System', meta: '' }
+  }
+
+  private renderAssistantMessage(message: Extract<SendMessageResponse, { type: 'assistant' }>): { content: string, badge: string, meta: string } {
+    const assistantMessage = message.message
+    type Segment = { kind: 'text', value: string } | { kind: 'html', value: string }
+    const segments: Segment[] = []
+    let containsTodoList = false
+
+    if (assistantMessage.content && Array.isArray(assistantMessage.content)) {
+      assistantMessage.content.forEach((block: any) => {
+        if (block.type === 'text' && block.text) {
+          segments.push({ kind: 'text', value: block.text })
+        } else if (block.type === 'tool_use' && block.name) {
+          if (block.name === 'TodoWrite' && block.input && 'todos' in block.input) {
+            containsTodoList = true
+            segments.push({
+              kind: 'html',
+              value: this.renderTodos(block.input.todos as Array<{ id: string, content: string, status: string }>)
+            })
+          } else {
+            const inputStr = block.input ? JSON.stringify(block.input, null, 2) : '{}'
+            segments.push({ kind: 'text', value: `${block.name}\n${inputStr}` })
+          }
+        } else if (block.text) {
+          segments.push({ kind: 'text', value: block.text })
+        }
+      })
+    }
+
+    if (segments.length === 0) {
+      segments.push({ kind: 'text', value: 'No content available' })
+    }
+
+    const htmlParts: string[] = []
+    segments.forEach(seg => {
+      if (seg.kind === 'html') {
+        htmlParts.push(seg.value)
+      } else {
+        const text = seg.value || ''
+        const display = text.length > CONFIG.MAX_CONTENT_LENGTH
+          ? text.substring(0, CONFIG.MAX_CONTENT_LENGTH) + '...'
+          : text
+        htmlParts.push(`<pre><code>${HtmlUtils.escapeHtml(display)}</code></pre>`)
+      }
+    })
+
+    const content = htmlParts.join('')
+    const meta = assistantMessage.model ? `Model: ${assistantMessage.model}` : ''
+
+    return { content, badge: (containsTodoList ? 'todo' : 'Claude'), meta }
+  }
+
+  private renderUserMessage(message: Extract<SendMessageResponse, { type: 'user' }>): { content: string, badge: string, meta: string } {
+    const userMessage = message.message
+    let userContent = 'User message'
+    let hasToolResult = false
+
+    if (userMessage.content && Array.isArray(userMessage.content)) {
+      const toolResults = userMessage.content
+        .filter((block: any) => block.type === 'tool_result')
+        .map((block: any) => {
+          const toolInfo = block.tool_use_id ? `Tool: ${block.tool_use_id}` : 'Tool Result'
+          const resultContent = block.content ? block.content : 'No content'
+          return `${toolInfo}: ${resultContent}`
+        })
+
+      if (toolResults.length > 0) {
+        hasToolResult = true
+        userContent = toolResults.join('\n')
+      }
+    }
+
+    return { content: HtmlUtils.escapeHtml(userContent), badge: (hasToolResult ? 'tool result' : 'User'), meta: '' }
+  }
+
+  private renderResultMessage(message: Extract<SendMessageResponse, { type: 'result' }>): { content: string, badge: string, meta: string } {
+    if (message.is_error) {
+      const errorText = message.result || message.subtype || 'Unknown error'
+      const content = `<strong>Error:</strong> ${HtmlUtils.escapeHtml(errorText)}<br>`
+        + `<strong>Duration:</strong> ${message.duration_ms}ms<br>`
+        + (message.duration_api_ms ? `<strong>API Duration:</strong> ${message.duration_api_ms}ms<br>` : '')
+        + (message.total_cost_usd ? `<strong>Cost:</strong> $${message.total_cost_usd.toFixed(4)}<br>` : '')
+
+      return { content, badge: 'Error', meta: '' }
+    } else {
+      let content = `<strong>Total Time:</strong> ${message.duration_ms}ms (API: ${message.duration_api_ms}ms)<br>`
+
+      if (message.total_cost_usd) {
+        content += `<strong>Cost:</strong> $${message.total_cost_usd.toFixed(4)}<br>`
+      }
+
+      if (message.usage) {
+        const usage = message.usage
+        const tokens: string[] = []
+        if (usage.input_tokens) tokens.push(`${usage.input_tokens}↑`)
+        if (usage.output_tokens) tokens.push(`${usage.output_tokens}↓`)
+        if (usage.cache_read_input_tokens) tokens.push(`${usage.cache_read_input_tokens}(cached)`)
+        if (tokens.length > 0) {
+          content += `<strong>Tokens:</strong> ${tokens.join(' ')}<br>`
+        }
+      }
+
+      if (message.num_turns) {
+        content += `<strong>Turns:</strong> ${message.num_turns}<br>`
+      }
+
+      if (message.permission_denials?.length) {
+        content += `<strong>Permission Denials:</strong> ${message.permission_denials.length}<br>`
+      }
+
+      return { content, badge: 'Complete', meta: '' }
+    }
+  }
+
+  // Progress messages have been removed. Fallback rendering is handled by renderUnknownMessage.
+
+  private renderUnknownMessage(message: SendMessageResponse): { content: string, badge: string, meta: string } {
+    const badge = `Unknown (${(message as any).type})`
+    let fallbackContent: string
+
+    if ('message' in message && typeof (message as any).message === 'string') {
+      fallbackContent = (message as any).message
+    } else {
+      fallbackContent = JSON.stringify(message, null, 2)
+    }
+
+    const displayContent = fallbackContent.length > CONFIG.MAX_CONTENT_LENGTH
+      ? fallbackContent.substring(0, CONFIG.MAX_CONTENT_LENGTH) + '...'
+      : fallbackContent
+
+    const isJsonContent = fallbackContent.startsWith('{') || fallbackContent.startsWith('[')
+    const content = isJsonContent
+      ? `<pre ><code>${HtmlUtils.escapeHtml(displayContent)}</code></pre>`
+      : `${HtmlUtils.escapeHtml(displayContent)}`
+
+    return { content, badge, meta: '' }
+  }
+
   private renderMessage(message: SendMessageResponse) {
-    if (!this.messageFormatter.shouldShowMessage(message)) {
+    if (!this.shouldShowMessage(message)) {
       return nothing
     }
 
-    const formattedMessage = this.messageFormatter.createMessage(message)
-    if (!formattedMessage) {
-      return nothing
+    let content = ''
+    let badge = ''
+    let meta = ''
+
+    try {
+      const result = (() => {
+        switch (message.type) {
+          case 'result':
+            return this.renderResultMessage(message as Extract<SendMessageResponse, { type: 'result' }>)
+          case 'assistant':
+            return this.renderAssistantMessage(message as Extract<SendMessageResponse, { type: 'assistant' }>)
+          case 'user':
+            return this.renderUserMessage(message as Extract<SendMessageResponse, { type: 'user' }>)
+          case 'system':
+            return this.renderSystemMessage(message as Extract<SendMessageResponse, { type: 'system' }>)
+          default:
+            return this.renderUnknownMessage(message)
+        }
+      })()
+
+      content = result.content
+      badge = result.badge
+      meta = result.meta
+    } catch (error) {
+      console.error('Error creating message:', error)
+      badge = 'Error'
+      content = `<pre style="background:#fee;padding:6px;border-radius:4px;overflow-x:auto;font-size:8px"><code>${JSON.stringify(message)}</code></pre>`
     }
+
+    const formattedMessage = this.formatMessage(content, badge, meta)
 
     return html`
-      <div class="json-message">
-        <div .innerHTML=${formattedMessage}></div>
-      </div>
+      <div class="message" .innerHTML=${formattedMessage}></div>
     `
   }
 
@@ -328,34 +473,34 @@ export class InspectorToolbar extends LitElement {
     e.stopImmediatePropagation()
 
     if (!this.isExpanded) {
-      this.events.emit('ui:expand', undefined)
+      this.expandToolbar()
 
       if (this.selectionManager.getSelectedCount() === 0 && !this.isInspecting && !this.isProcessing) {
-        this.events.emit('ui:enter-inspection', undefined)
+        this.enterInspectionModeInternal()
       }
     } else {
-      this.events.emit('ui:collapse', undefined)
+      this.collapseToolbar()
 
       if (this.isInspecting) {
-        this.events.emit('ui:exit-inspection', undefined)
+        this.exitInspectionModeInternal()
       }
-      this.events.emit('selection:clear', undefined)
-      this.events.emit('prompt:clear', undefined)
+      this.clearSelection()
+      this.clearPrompt()
     }
   }
 
   private handleInspect() {
     if (!this.isProcessing) {
-      this.events.emit('ui:enter-inspection', undefined)
+      this.enterInspectionModeInternal()
     }
   }
 
   private handleClearElements() {
-    this.events.emit('selection:clear', undefined)
+    this.clearSelection()
   }
 
   private handleCloseInspection() {
-    this.events.emit('ui:exit-inspection', undefined)
+    this.exitInspectionModeInternal()
   }
 
   private async handleNewChat() {
@@ -369,15 +514,14 @@ export class InspectorToolbar extends LitElement {
     }
     this.selectionManager.clearAllSelections()
     this.hasSelectedElements = false
-    this.messages = []
-    this.messageFormatter.clearMessages()
+    this.clearMessagesInternal()
 
-    this.events.emit('ui:enter-inspection', undefined)
+    this.enterInspectionModeInternal()
 
     if (this.aiManager.isInitialized()) {
       try {
         await this.aiManager.newChat()
-        this.events.emit('session:updated', { sessionId: this.aiManager.getSessionId() })
+        this.updateSessionId(this.aiManager.getSessionId())
       } catch (error) {
         this.logger.error('Failed to start new chat:', error)
       }
@@ -398,13 +542,12 @@ export class InspectorToolbar extends LitElement {
       }
       this.selectionManager.clearAllSelections()
       this.hasSelectedElements = false
-      this.messages = []
-      this.messageFormatter.clearMessages()
+      this.clearMessagesInternal()
 
       if (this.aiManager.isInitialized()) {
         try {
           await this.aiManager.newChat()
-          this.events.emit('session:updated', { sessionId: this.aiManager.getSessionId() })
+          this.updateSessionId(this.aiManager.getSessionId())
         } catch (error) {
           this.logger.error('Failed to start new chat after cancel:', error)
         }
@@ -441,6 +584,7 @@ export class InspectorToolbar extends LitElement {
     } else {
       this.selectionManager.selectElement(element, (el) => findNearestComponent(el, this.verbose))
     }
+    // Update reactive properties
     this.hasSelectedElements = this.selectionManager.getSelectedCount() > 0
   }
 
@@ -458,8 +602,8 @@ export class InspectorToolbar extends LitElement {
       const parent = currentElement.parentNode
       if (parent && parent.nodeType === Node.ELEMENT_NODE) {
         currentElement = parent as Element
-      } else if ((currentElement as any).host) {
-        currentElement = (currentElement as any).host
+      } else if ('host' in currentElement && currentElement.host instanceof Element) {
+        currentElement = currentElement.host
       } else {
         break
       }
@@ -484,7 +628,7 @@ export class InspectorToolbar extends LitElement {
 
     // Exit inspection mode when prompt is submitted
     if (this.isInspecting) {
-      this.events.emit('ui:exit-inspection', undefined)
+      this.exitInspectionModeInternal()
     }
 
     const pageInfo = this.getCurrentPageInfo()
@@ -540,25 +684,30 @@ export class InspectorToolbar extends LitElement {
 
       const messageHandler: AIMessageHandler = {
         onData: (data: SendMessageResponse) => {
-          if (data.type === 'claude_json') {
-            this.showProcessingIndicator = false
-            this.events.emit('messages:add', data)
-          } else if (data.type === 'claude_response') {
-            this.showProcessingMessage = false
-            this.events.emit('messages:add', data)
-          } else if (data.type === 'complete') {
+          console.log(data)
+
+          // Update session ID from message
+          if (data.session_id) {
+            this.updateSessionId(data.session_id)
+          }
+
+          // Handle system init message
+          if (data.type === "system" && data.subtype === "init") {
+            this.showInitiatingIndicator = false
+            this.showProcessingMessage = true
+          }
+
+          // Handle result message - end processing
+          if (data.type === 'result') {
             if (this.promptInputRef.value) {
               this.promptInputRef.value.value = ''
             }
-            this.showProcessingIndicator = false
             this.showProcessingMessage = false
             this.setProcessingState(false)
           }
 
-          // Update session display when session ID is received
-          if ((data.type === 'complete' || data.type === 'claude_response' || data.type === 'claude_json') && data.sessionId) {
-            this.events.emit('session:updated', { sessionId: data.sessionId })
-          }
+          // Add message to display (this should be last to ensure all state is updated)
+          this.addMessage(data)
         },
         onError: (error) => {
           this.logger.error('AI subscription error:', error)
@@ -605,14 +754,14 @@ export class InspectorToolbar extends LitElement {
 
   private setProcessingState(isProcessing: boolean): void {
     if (isProcessing) {
-      this.showProcessingIndicator = true
+      this.startProcessing()
+      this.showInitiatingIndicator = true
       this.showProcessingMessage = true
-      this.events.emit('ui:processing-start', undefined)
       window.onbeforeunload = () => 'Processing in progress. Are you sure you want to leave?'
     } else {
-      this.showProcessingIndicator = false
+      this.endProcessing()
+      this.showInitiatingIndicator = false
       this.showProcessingMessage = false
-      this.events.emit('ui:processing-end', undefined)
       window.onbeforeunload = null
     }
   }
@@ -625,7 +774,7 @@ export class InspectorToolbar extends LitElement {
     if (!this.aiManager.isInitialized()) {
       this.aiManager.initialize(this.aiEndpoint)
     }
-    this.events.emit('session:updated', { sessionId: this.aiManager.getSessionId() })
+    this.updateSessionId(this.aiManager.getSessionId())
 
     // Handle clicks outside to collapse
     document.addEventListener('click', this.handleOutsideClick)
@@ -639,44 +788,17 @@ export class InspectorToolbar extends LitElement {
     this.aiManager.destroy()
     this.inspectionManager.destroy()
     this.selectionManager.clearAllSelections()
-    this.events.cleanup()
-    this.cleanupFunctions.forEach(cleanup => cleanup())
 
     document.removeEventListener('click', this.handleOutsideClick)
   }
 
   private handleOutsideClick = (e: Event) => {
     if (!this.contains(e.target as Node) && this.isExpanded && !this.isInspecting) {
-      this.events.emit('ui:collapse', undefined)
+      this.collapseToolbar()
     }
   }
 
-  // ===============================
-  // MESSAGE FORMATTING METHODS
-  // ===============================
-
-  private formatPrompt(userPrompt: string, selectedElements: ElementData[], pageInfo: PageInfo): string {
-    let formattedPrompt = `<userRequest>${userPrompt}</userRequest>`
-
-    const replacer = (_key: string, value: any) => {
-      if (value === '' || (Array.isArray(value) && value.length === 0) || value === null) {
-        return undefined
-      }
-      return value
-    }
-
-    if (pageInfo) {
-      formattedPrompt += `<pageInfo>${JSON.stringify(pageInfo, replacer)}</pageInfo>`
-    }
-
-    if (selectedElements && selectedElements.length > 0) {
-      formattedPrompt += `<inspectedElements>${JSON.stringify(selectedElements, replacer)}</inspectedElements>`
-    }
-
-    return formattedPrompt
-  }
-
-  private shouldShowMessage(jsonData: any): boolean {
+  private shouldShowMessage(jsonData: SendMessageResponse): boolean {
     // Always show messages that don't have a hash (empty content)
     const messageHash = this.hashMessage(jsonData)
     if (!messageHash) return true
@@ -684,264 +806,69 @@ export class InspectorToolbar extends LitElement {
     // Skip exact consecutive duplicates
     if (messageHash === this.lastMessageHash) return false
 
-    // Only check history for assistant messages to prevent duplicate streaming
-    if (jsonData.type === 'assistant' && this.messageHistory.has(messageHash)) return false
-
     // Track message
     this.lastMessageHash = messageHash
-    if (jsonData.type === 'assistant') {
-      this.messageHistory.add(messageHash)
-      if (this.messageHistory.size > CONFIG.MESSAGE_HISTORY_LIMIT) {
-        const firstHash = this.messageHistory.values().next().value
-        if (firstHash) this.messageHistory.delete(firstHash)
-      }
+    this.messageHistory.add(messageHash)
+    if (this.messageHistory.size > CONFIG.MESSAGE_HISTORY_LIMIT) {
+      const firstHash = this.messageHistory.values().next().value
+      if (firstHash) this.messageHistory.delete(firstHash)
     }
 
-    // Always show non-assistant messages (including Claude JSON responses)
+    // Always show messages
     return true
   }
 
-  private createMessage(data: any): string | null {
-    try {
-      // Handle different message types clearly
-      if (data.type === 'assistant') {
-        return this.createAssistantMessage(data)
-      } else if (data.type === 'user') {
-        return this.createUserMessage(data)
-      } else if (data.type === 'system') {
-        return this.createSystemMessage(data)
-      } else if (data.type === 'result') {
-        return this.createResultMessage(data)
-      } else if (data.type === 'claude_response') {
-        return this.createClaudeResponseMessage(data)
-      } else {
-        return this.createFallbackMessage(data)
-      }
-    } catch (error) {
-      console.error('Error creating message:', error)
-      return this.createErrorMessage(data)
-    }
-  }
-
-  private clearMessages(): void {
-    this.lastMessageHash = ''
-    this.messageHistory.clear()
-  }
-
-  // Helper methods for message creation
-  private createAssistantMessage(data: any): string | null {
-    if (!data.message?.content) return null
-
-    const extracted = this.extractContentFromAssistant(data.message.content)
-
-    // Regular assistant message - escape HTML for safety
-    const meta = data.message?.usage ?
-      `${data.message.usage.input_tokens || 0}↑ ${data.message.usage.output_tokens || 0}↓` : ''
-
-    return this.formatMessage(extracted.text, extracted.badge, meta)
-  }
-
-  private createUserMessage(data: any): string | null {
-    if (!data.message?.content) return null
-
-    const extracted = this.extractContentFromUser(data.message.content)
-
-    // Escape HTML for user messages
-    return this.formatMessage(extracted.text, extracted.badge)
-  }
-
-  private createSystemMessage(data: any): string {
-    const content = `System: ${data.subtype || 'message'}`
-    const meta = data.cwd ? data.cwd : ''
-    return this.formatMessage(content, 'System', meta)
-  }
-
-  private createResultMessage(data: any): string {
-    const content = data.result || 'Task completed'
-    return this.formatMessage(content, 'Result')
-  }
-
-  private createClaudeResponseMessage(response: any): string {
-    // Create a summary content showing key metrics instead of the full text result
-    let content = ''
-    // Show timing information
-    if (response.duration_ms) {
-      content += `<strong>Total Time:</strong> ${response.duration_ms}ms`
-      if (response.duration_api_ms) {
-        content += ` (API: ${response.duration_api_ms}ms)`
-      }
-      content += '<br>'
+  private renderTodos(todos: Array<{ id: string, content: string, status: string }>): string {
+    if (!Array.isArray(todos)) {
+      return '<strong>TodoWrite</strong>\nInvalid todos format'
     }
 
-    // Show cost information
-    if (response.total_cost_usd) {
-      content += `<strong>Cost:</strong> $${response.total_cost_usd.toFixed(4)}<br>`
-    }
+    let html = '<div style="margin: 8px 0;"><strong>📋 Todo List</strong></div>'
+    html += '<div style="border-left: 3px solid #007acc; padding-left: 12px; margin: 8px 0;">'
 
-    // Show token usage
-    if (response.usage) {
-      const usage = response.usage
-      const tokens = []
-      if (usage.input_tokens) tokens.push(`${usage.input_tokens}↑`)
-      if (usage.output_tokens) tokens.push(`${usage.output_tokens}↓`)
-      if (usage.cache_read_input_tokens) tokens.push(`${usage.cache_read_input_tokens}(cached)`)
-      if (tokens.length > 0) {
-        content += `<strong>Tokens:</strong> ${tokens.join(' ')}<br>`
-      }
-    }
-
-    // Show turn count
-    if (response.num_turns) {
-      content += `<strong>Turns:</strong> ${response.num_turns}<br>`
-    }
-    return this.formatMessage(content, 'Claude Complete', "")
-  }
-
-  private createFallbackMessage(data: any): string {
-    // For Claude JSON responses that don't match known types
-    // Display them in a readable format
-    const content = typeof data === 'string'
-      ? data
-      : JSON.stringify(data, null, 2)
-
-    // Truncate if too long but ensure we always show something
-    const displayContent = content.length > CONFIG.MAX_CONTENT_LENGTH
-      ? content.substring(0, CONFIG.MAX_CONTENT_LENGTH) + '...'
-      : content
-
-    // Wrap JSON in a pre/code block for better formatting
-    const formattedContent = typeof data === 'object'
-      ? `<pre style="background:#f5f5f5;padding:6px;border-radius:4px;overflow-x:auto;font-size:8px"><code>${displayContent}</code></pre>`
-      : displayContent
-
-    return this.formatMessage(formattedContent, 'Claude')
-  }
-
-  private createErrorMessage(data: any): string {
-    const errorContent = `<pre style="background:#fee;padding:6px;border-radius:4px;overflow-x:auto;font-size:8px"><code>${JSON.stringify(data)}</code></pre>`
-    return this.formatMessage(errorContent, 'Error')
-  }
-
-  private formatMessage(content: string, badge?: string, meta?: string): string {
-    const badgeHtml = badge ? `<div class="message-badge">${badge}</div>` : ''
-    const metaHtml = meta ? `<div class="message-meta">${meta}</div>` : ''
-    // Don't escape HTML in content since we're now using HTML formatting
-    return `<div class="message-wrapper">${badgeHtml}<div class="message-content">${content}</div>${metaHtml}</div>`
-  }
-
-  private formatTodoList(input: any): string {
-    if (!input || !input.todos || !Array.isArray(input.todos)) {
-      return '<div>No todos found</div>'
-    }
-
-    const todos = input.todos
-    let html = '<div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; margin: 4px 0;">'
-    html += '<div style="font-weight: 600; color: #374151; margin-bottom: 6px; font-size: 12px;">📝 Todo List</div>'
-
-    todos.forEach((todo: any) => {
-      const status = todo.status || 'pending'
-      let statusIcon = '⚪'
-      let statusColor = '#6b7280'
-
-      switch (status) {
-        case 'completed':
-          statusIcon = '✅'
-          statusColor = '#059669'
-          break
-        case 'in_progress':
-          statusIcon = '🔄'
-          statusColor = '#dc2626'
-          break
-        case 'pending':
-          statusIcon = '⚪'
-          statusColor = '#6b7280'
-          break
-      }
-
-      html += `<div style="display: flex; align-items: flex-start; gap: 8px; padding: 4px 0; border-bottom: 1px solid #f3f4f6; font-size: 11px;">`
-      html += `<span style="color: ${statusColor}; flex-shrink: 0;">${statusIcon}</span>`
-      html += `<span style="color: #374151; line-height: 1.4;">${HtmlUtils.escapeHtml(todo.content || '')}</span>`
-      html += `</div>`
+    todos.forEach(todo => {
+      const statusIcon = this.getStatusIcon(todo.status)
+      const statusColor = this.getStatusColor(todo.status)
+      html += `<div style="margin: 4px 0; display: flex; align-items: flex-start; gap: 8px;">
+        <span style="color: ${statusColor}; font-size: 16px; line-height: 1.2; margin-top: 1px;">${statusIcon}</span>
+        <span style="flex: 1; color: ${todo.status === 'completed' ? '#666' : 'inherit'}; ${todo.status === 'completed' ? 'text-decoration: line-through;' : ''}">${HtmlUtils.escapeHtml(todo.content)}</span>
+      </div>`
     })
 
     html += '</div>'
     return html
   }
 
-  private extractContentFromAssistant(content: any[]): { text: string, badge?: string } {
-    const items = content.map(item => {
-      if (item.type === 'text') {
-        return { text: item.text, badge: undefined }
-      } else if (item.type === 'tool_use') {
-        // Special handling for TodoWrite tool
-        if (item.name === 'TodoWrite') {
-          const todoContent = this.formatTodoList(item.input)
-          return {
-            text: todoContent,
-            badge: item.name
-          }
-        } else {
-          const toolContent = `${item.input ? yaml.dump(item.input, { indent: 2 }) : ''}`
-          return {
-            text: `<pre>${HtmlUtils.escapeHtml(toolContent)}</pre>`,
-            badge: item.name
-          }
-        }
-      }
-      return { text: '', badge: undefined }
-    }).filter(item => item.text)
-    
-    if (items.length === 0) return { text: '' }
-    
-    const toolUseItem = items.find(item => item.badge)
-    if (toolUseItem) {
-      return {
-        text: items.map(item => item.text).join('\n'),
-        badge: toolUseItem.badge
-      }
+  private getStatusIcon(status: string): string {
+    switch (status) {
+      case 'completed': return '✅'
+      case 'in_progress': return '🔄'
+      case 'pending': return '⏳'
+      default: return '❓'
     }
-    
-    return { text: items.map(item => item.text).join('\n') }
   }
 
-  private extractContentFromUser(content: any[]): { text: string, badge?: string } {
-    const items = content.map(item => {
-      if (item.type === 'text') {
-        return { text: item.text, badge: undefined }
-      } else if (item.type === 'tool_result') {
-        const result = typeof item.content === 'string' ? item.content : JSON.stringify(item.content)
-        return { 
-          text: `<pre>${HtmlUtils.escapeHtml(result)}</pre>`,
-          badge: 'Tool Result'
-        }
-      }
-      return { text: '', badge: undefined }
-    })
-    
-    const toolResultItem = items.find(item => item.badge)
-    if (toolResultItem) {
-      return {
-        text: items.filter(item => item.text).map(item => item.text).join('\n'),
-        badge: toolResultItem.badge
-      }
+  private getStatusColor(status: string): string {
+    switch (status) {
+      case 'completed': return '#28a745'
+      case 'in_progress': return '#007acc'
+      case 'pending': return '#ffc107'
+      default: return '#6c757d'
     }
-
-    const filteredItems = items.filter(item => item.text)
-    if (filteredItems.length === 0) return { text: '' }
-
-    return { text: filteredItems.map(item => item.text).join('\n') }
   }
 
-  private hashMessage(jsonData: any): string {
-    let content = ''
-    if (jsonData.type === 'assistant' && jsonData.message?.content) {
-      content = this.extractContentFromAssistant(jsonData.message.content).text
-    } else if (jsonData.type === 'user' && jsonData.message?.content) {
-      content = this.extractContentFromUser(jsonData.message.content).text
-    } else {
-      content = JSON.stringify(jsonData)
-    }
-    
+  private formatMessage(content: string, badge?: string, meta?: string): string {
+    const badgeHtml = badge ? `<span class="badge">${badge}</span>` : ''
+    const metaHtml = meta ? `<small class="meta">${meta}</small>` : ''
+    return `${badgeHtml}${content}${metaHtml}`
+  }
+
+  private hashMessage(jsonData: SendMessageResponse): string {
+    const content = ('message' in jsonData
+      ? typeof jsonData.message === 'string'
+        ? jsonData.message
+        : JSON.stringify(jsonData.message)
+      : JSON.stringify(jsonData))
     return HtmlUtils.hashString(content || '')
   }
 }

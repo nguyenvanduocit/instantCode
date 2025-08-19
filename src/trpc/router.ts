@@ -37,10 +37,9 @@ export const appRouter = router({
       const subscriptionId = Math.random().toString(36).substring(7)
       ctx.logger.log(`🔵 [SERVER] New subscription created: ${subscriptionId} for session: ${input.sessionId || 'new'}`)
       
-      yield {
-        type: 'connection',
-        message: 'Connected to Frontend Context',
-      } as SendMessageResponse
+      // Process with Claude Code
+      let currentSessionId: string | undefined = input.sessionId
+
       ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent connection message`)
 
       const componentLocations = extractComponentLocationsFromElements(input.selectedElements)
@@ -54,34 +53,7 @@ export const appRouter = router({
       })
       ctx.logger.log('Extracted component locations:', componentLocations)
 
-      if (componentLocations.length > 0) {
-        const progressMsg = {
-          type: 'progress',
-          message: `Found ${componentLocations.length} component(s)`,
-          componentLocations,
-        } as SendMessageResponse
-        yield progressMsg
-        ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent progress message: Found ${componentLocations.length} component(s)`)
-      } else {
-        const progressMsg = {
-          type: 'progress',
-          message: 'No component locations found in elements',
-        } as SendMessageResponse
-        yield progressMsg
-        ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent progress message: No components found`)
-      }
-
-      // Process with Claude Code
-      let currentSessionId: string | undefined = input.sessionId
-
       try {
-        const processingMsg = {
-          type: 'progress',
-          message: 'Processing with Claude...',
-        } as SendMessageResponse
-        yield processingMsg
-        ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent processing message`)
-
         const abortController = new AbortController()
         
         // Forward the tRPC signal cancellation to our AbortController
@@ -111,8 +83,13 @@ export const appRouter = router({
           // Check if the request was cancelled
           if (abortController.signal.aborted) {
             yield {
-              type: 'progress',
-              message: 'Request was cancelled',
+              type: 'result',
+              subtype: 'error',
+              is_error: true,
+              duration_ms: 0,
+              duration_api_ms: 0,
+              result: 'Request was cancelled',
+              session_id: currentSessionId || '',
             } as SendMessageResponse
             break
           }
@@ -123,84 +100,40 @@ export const appRouter = router({
           }
 
 
-          // Stream all Claude Code messages as JSON to the toolbar
-          const claudeMsg = {
-            type: 'claude_json',
-            message: 'Claude Code message',
-            claudeJson: message,
-            sessionId: currentSessionId,
+          // Stream all Claude Code messages directly to the toolbar with their original type
+          yield {
+            ...message,
+            session_id: currentSessionId,
           } as SendMessageResponse
-          yield claudeMsg
-          ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent claude_json message: ${message.type}`)
+          ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent message: ${message.type}`)
 
-          if (message.type === "result" && !message.is_error) {
-            yield {
-              type: 'claude_response',
-              message: 'Claude analysis complete',
-              claudeResponse: {
-                type: 'claude_response',
-                result: (message as any).result || 'Task completed',
-                duration_ms: message.duration_ms,
-                duration_api_ms: message.duration_api_ms,
-                num_turns: message.num_turns,
-                total_cost_usd: message.total_cost_usd,
-                session_id: message.session_id,
-                usage: message.usage,
-                is_error: message.is_error,
-                subtype: message.subtype,
-                permission_denials: message.permission_denials,
-              },
-              sessionId: currentSessionId,
-            } as SendMessageResponse
-          } else if (message.type === "result" && message.is_error) {
-            yield {
-              type: 'progress',
-              message: 'Claude analysis failed: ' + message.subtype,
-            } as SendMessageResponse
-          }
         }
-
-
-        const completeMsg = {
-          type: 'complete',
-          message: 'Message processed successfully',
-          prompt: formattedPrompt,
-          componentLocations,
-          sessionId: currentSessionId,
-        } as SendMessageResponse
-        yield completeMsg
         ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent completion message`)
       } catch (error) {
         // Check if the error is due to cancellation
         if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('aborted'))) {
           ctx.logger.log(`🚫 [SERVER ${subscriptionId}] Claude processing was cancelled`)
           yield {
-            type: 'progress',
-            message: 'Request was cancelled',
-          } as SendMessageResponse
-          
-          yield {
-            type: 'complete',
-            message: 'Processing was cancelled',
-            prompt: formattedPrompt,
-            componentLocations,
-            sessionId: currentSessionId,
+            type: 'result',
+            subtype: 'error',
+            is_error: true,
+            duration_ms: 0,
+            duration_api_ms: 0,
+            result: 'Request was cancelled',
+            session_id: currentSessionId || '',
           } as SendMessageResponse
           ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent cancellation messages`)
         } else {
           ctx.logger.error(`❌ [SERVER ${subscriptionId}] Claude processing error:`, error)
           
           yield {
-            type: 'progress',
-            message: 'Error processing with Claude: ' + (error as Error).message,
-          } as SendMessageResponse
-
-          yield {
-            type: 'complete',
-            message: 'Processing completed with errors',
-            prompt: formattedPrompt,
-            componentLocations,
-            sessionId: currentSessionId,
+            type: 'result',
+            subtype: 'error',
+            is_error: true,
+            duration_ms: 0,
+            duration_api_ms: 0,
+            result: 'Error processing with Claude: ' + (error as Error).message,
+            session_id: currentSessionId || '',
           } as SendMessageResponse
           ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent error messages`)
         }
