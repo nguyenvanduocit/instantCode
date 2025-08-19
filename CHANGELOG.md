@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.7.0](https://github.com/nguyenvanduocit/instantCode/compare/v1.6.0...v1.7.0) (2025-08-19)
+
+
+### Features
+
+* **vite:** restrict plugin to development mode only ([c006dae](https://github.com/nguyenvanduocit/instantCode/commit/c006dae7969ece2e778a22f967b33a4c1ad3dff0))
+
 ## [1.6.0](https://github.com/nguyenvanduocit/instantCode/compare/v1.5.0...v1.6.0) (2025-08-19)
 
 
