@@ -12,12 +12,12 @@ import type { ElementData, PageInfo, SendMessageResponse } from './shared/types'
 import { createAIManager, type AIManager, type AIMessageHandler } from './inspector/ai'
 import { createElementSelectionManager, type ElementSelectionManager } from './inspector/selection'
 import { createInspectionManager, type InspectionManager } from './inspector/inspection'
-import { createToolbarStateManager, type ToolbarStateManager } from './inspector/state'
 import { findNearestComponent } from './inspector/detectors'
 import { createLogger, type Logger } from './inspector/logger'
 import { createMessageFormatter, type MessageFormatter } from './inspector/ui'
 import { createToolbarEventEmitter } from './inspector/events'
 import { TOOLBAR_STYLES } from './inspector/style'
+import { string } from 'zod'
 
 @customElement('inspector-toolbar')
 export class InspectorToolbar extends LitElement {
@@ -25,13 +25,13 @@ export class InspectorToolbar extends LitElement {
   @property({ attribute: 'ai-endpoint' })
   aiEndpoint = ''
 
-  @property()
+  @property({ type: string })
   cwd = ''
 
   @property({ type: Boolean })
   verbose = false
 
-  // Internal state
+  // Internal state - all managed through Lit's reactive properties
   @state()
   private isExpanded = false
 
@@ -43,6 +43,9 @@ export class InspectorToolbar extends LitElement {
 
   @state()
   private sessionId = ''
+
+  @state()
+  private selectedElements: ElementData[] = []
 
   @state()
   private hasSelectedElements = false
@@ -58,7 +61,6 @@ export class InspectorToolbar extends LitElement {
 
   // Managers
   private events = createToolbarEventEmitter()
-  private stateManager: ToolbarStateManager
   private selectionManager: ElementSelectionManager
   private aiManager: AIManager
   private inspectionManager: InspectionManager
@@ -81,7 +83,6 @@ export class InspectorToolbar extends LitElement {
     this.logger = createLogger(this.verbose)
 
     // Initialize managers using factory functions
-    this.stateManager = createToolbarStateManager(this.events)
     this.selectionManager = createElementSelectionManager()
     this.aiManager = createAIManager(this.verbose)
     this.inspectionManager = createInspectionManager(
@@ -95,13 +96,14 @@ export class InspectorToolbar extends LitElement {
   }
 
   private setupEventListeners(): void {
-    // Listen to state changes and update reactive properties
+    // Listen to state changes and update reactive properties directly
     this.cleanupFunctions.push(
       this.events.on('ui:expand', () => {
         this.isExpanded = true
       }),
       this.events.on('ui:collapse', () => {
         this.isExpanded = false
+        this.isInspecting = false
       }),
       this.events.on('ui:enter-inspection', () => {
         this.enterInspectionMode()
@@ -113,6 +115,7 @@ export class InspectorToolbar extends LitElement {
       }),
       this.events.on('ui:processing-start', () => {
         this.isProcessing = true
+        this.isInspecting = false
       }),
       this.events.on('ui:processing-end', () => {
         this.isProcessing = false
@@ -120,12 +123,28 @@ export class InspectorToolbar extends LitElement {
       this.events.on('session:updated', ({ sessionId }) => {
         this.sessionId = sessionId || ''
       }),
-      this.events.on('selection:changed', () => {
+      this.events.on('session:new', () => {
+        this.sessionId = ''
+        this.selectedElements = []
+        this.messages = []
+      }),
+      this.events.on('selection:changed', (elements) => {
+        this.selectedElements = elements || []
         this.hasSelectedElements = this.selectionManager.getSelectedCount() > 0
       }),
       this.events.on('messages:add', (message) => {
         this.messages = [...this.messages, message]
-        this.requestUpdate()
+        
+        // Update session ID from messages
+        if ((message.type === 'claude_json' || message.type === 'claude_response' || message.type === 'complete') && message.sessionId) {
+          this.sessionId = message.sessionId
+        }
+        
+        // End processing when complete
+        if (message.type === 'complete') {
+          this.isProcessing = false
+        }
+        
         // Auto-scroll to bottom
         this.updateComplete.then(() => {
           if (this.jsonContentRef.value) {
@@ -144,6 +163,7 @@ export class InspectorToolbar extends LitElement {
       }),
       this.events.on('selection:clear', () => {
         this.selectionManager.clearAllSelections()
+        this.selectedElements = []
         this.hasSelectedElements = false
       }),
       this.events.on('notification:show', ({ message, type }) => {
@@ -180,7 +200,7 @@ export class InspectorToolbar extends LitElement {
           <div
             class=${classMap({
           'session-info': true,
-          'visible': !!this.sessionId
+              'hidden': !this.sessionId
         })}
           >
             <span class="session-label">Session:</span>
@@ -551,7 +571,6 @@ export class InspectorToolbar extends LitElement {
     this.aiManager.destroy()
     this.inspectionManager.destroy()
     this.selectionManager.clearAllSelections()
-    this.stateManager.destroy()
     this.events.cleanup()
     this.cleanupFunctions.forEach(cleanup => cleanup())
 

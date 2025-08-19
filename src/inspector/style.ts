@@ -30,6 +30,10 @@ export const TOOLBAR_STYLES = css`
     box-sizing: border-box;
   }
 
+  .hidden{
+    display: none !important;
+  }
+
   @keyframes gradientShift {
     0% { background-position: 0% 50%; }
     14% { background-position: 23% 77%; }
