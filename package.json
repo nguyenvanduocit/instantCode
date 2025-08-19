@@ -4,14 +4,18 @@
   "description": "AI-powered web inspection tool - Pick elements and get instant AI assistance",
   "type": "module",
   "main": "dist/index.cjs",
+  "types": "dist/index.d.ts",
   "bin": {
     "instantcode": "./dist/index.cjs"
   },
   "exports": {
-    ".": "./dist/index.cjs",
+    ".": {
+      "require": "./dist/index.cjs",
+      "types": "./dist/index.d.ts"
+    },
     "./vite-plugin": {
       "import": "./dist/vite-plugin.js",
-      "types": "./src/vite-plugin.ts"
+      "types": "./dist/vite-plugin.d.ts"
     }
   },
   "scripts": {
@@ -19,7 +23,8 @@
     "build:server": "bun scripts/build-server.js",
     "build:inspector": "bun scripts/build-inspector.js",
     "build:vite-plugin": "bun scripts/build-vite-plugin.js",
-    "build": "bun run build:server && bun run build:inspector && bun run build:vite-plugin",
+    "build:types": "bun scripts/build-types.js",
+    "build": "bun run build:server && bun run build:inspector && bun run build:vite-plugin && bun run build:types",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "bun run build"
   },
