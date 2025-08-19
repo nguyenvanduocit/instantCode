@@ -14,10 +14,32 @@ import { createElementSelectionManager, type ElementSelectionManager } from './i
 import { createInspectionManager, type InspectionManager } from './inspector/inspection'
 import { findNearestComponent } from './inspector/detectors'
 import { createLogger, type Logger } from './inspector/logger'
-import { createMessageFormatter, type MessageFormatter } from './inspector/ui'
 import { createToolbarEventEmitter } from './inspector/events'
 import { TOOLBAR_STYLES } from './inspector/style'
-import { string } from 'zod'
+import { HtmlUtils } from './utils/html'
+import * as yaml from 'js-yaml'
+import { 
+  initializeConsoleErrorCapture, 
+  captureConsoleErrors, 
+  captureConsoleWarnings, 
+  captureConsoleInfo 
+} from './inspector/console'
+
+// Configuration constants
+const CONFIG = {
+  MAX_CONTENT_LENGTH: 10000,
+  MAX_RESULT_LENGTH: 10000,
+  MAX_INPUT_DISPLAY: 10000,
+  MESSAGE_HISTORY_LIMIT: 10
+} as const
+
+// Message formatter interface
+interface MessageFormatter {
+  formatPrompt(userPrompt: string, selectedElements: ElementData[], pageInfo: PageInfo): string
+  shouldShowMessage(jsonData: any): boolean
+  createMessage(data: any): string | null
+  clearMessages(): void
+}
 
 @customElement('inspector-toolbar')
 export class InspectorToolbar extends LitElement {
@@ -74,6 +96,10 @@ export class InspectorToolbar extends LitElement {
   // Event cleanup functions
   private cleanupFunctions: (() => void)[] = []
 
+  // Message formatter state
+  private lastMessageHash = ''
+  private messageHistory = new Set<string>()
+
   static styles = TOOLBAR_STYLES
 
   constructor() {
@@ -81,6 +107,9 @@ export class InspectorToolbar extends LitElement {
 
     // Initialize logger first
     this.logger = createLogger(this.verbose)
+
+    // Initialize console error capture on first toolbar creation
+    initializeConsoleErrorCapture()
 
     // Initialize managers using factory functions
     this.selectionManager = createElementSelectionManager()
@@ -90,7 +119,15 @@ export class InspectorToolbar extends LitElement {
       (element) => this.shouldIgnoreElement(element),
       (element) => this.selectionManager.hasElement(element)
     )
-    this.messageFormatter = createMessageFormatter()
+    
+    // Create inline message formatter
+    this.messageFormatter = {
+      formatPrompt: (userPrompt, selectedElements, pageInfo) => 
+        this.formatPrompt(userPrompt, selectedElements, pageInfo),
+      shouldShowMessage: (jsonData) => this.shouldShowMessage(jsonData),
+      createMessage: (data) => this.createMessage(data),
+      clearMessages: () => this.clearMessages()
+    }
 
     this.setupEventListeners()
   }
@@ -484,6 +521,23 @@ export class InspectorToolbar extends LitElement {
 
       this.setProcessingState(true)
 
+      // Capture console messages based on prompt keywords
+      let consoleErrors: string[] | undefined
+      let consoleWarnings: string[] | undefined
+      let consoleInfo: string[] | undefined
+
+      if (prompt.includes('@error')) {
+        consoleErrors = captureConsoleErrors()
+      }
+
+      if (prompt.includes('@warning')) {
+        consoleWarnings = captureConsoleWarnings()
+      }
+
+      if (prompt.includes('@info')) {
+        consoleInfo = captureConsoleInfo()
+      }
+
       const messageHandler: AIMessageHandler = {
         onData: (data: SendMessageResponse) => {
           if (data.type === 'claude_json') {
@@ -516,8 +570,22 @@ export class InspectorToolbar extends LitElement {
         }
       }
 
+      // For now, keep using the existing AI manager method but extend it with console data
+      // We would need to modify the AI manager to handle console data, but for simplicity
+      // we'll add this as additional context to the prompt when console capture keywords are used
+      let enhancedPrompt = prompt
+      if (consoleErrors?.length) {
+        enhancedPrompt += '\n\n**Console Errors:**\n' + consoleErrors.join('\n')
+      }
+      if (consoleWarnings?.length) {
+        enhancedPrompt += '\n\n**Console Warnings:**\n' + consoleWarnings.join('\n')
+      }
+      if (consoleInfo?.length) {
+        enhancedPrompt += '\n\n**Console Info:**\n' + consoleInfo.join('\n')
+      }
+
       await this.aiManager.sendMessage(
-        prompt,
+        enhancedPrompt,
         selectedElements,
         pageInfo,
         this.cwd,
@@ -581,6 +649,300 @@ export class InspectorToolbar extends LitElement {
     if (!this.contains(e.target as Node) && this.isExpanded && !this.isInspecting) {
       this.events.emit('ui:collapse', undefined)
     }
+  }
+
+  // ===============================
+  // MESSAGE FORMATTING METHODS
+  // ===============================
+
+  private formatPrompt(userPrompt: string, selectedElements: ElementData[], pageInfo: PageInfo): string {
+    let formattedPrompt = `<userRequest>${userPrompt}</userRequest>`
+
+    const replacer = (_key: string, value: any) => {
+      if (value === '' || (Array.isArray(value) && value.length === 0) || value === null) {
+        return undefined
+      }
+      return value
+    }
+
+    if (pageInfo) {
+      formattedPrompt += `<pageInfo>${JSON.stringify(pageInfo, replacer)}</pageInfo>`
+    }
+
+    if (selectedElements && selectedElements.length > 0) {
+      formattedPrompt += `<inspectedElements>${JSON.stringify(selectedElements, replacer)}</inspectedElements>`
+    }
+
+    return formattedPrompt
+  }
+
+  private shouldShowMessage(jsonData: any): boolean {
+    // Always show messages that don't have a hash (empty content)
+    const messageHash = this.hashMessage(jsonData)
+    if (!messageHash) return true
+
+    // Skip exact consecutive duplicates
+    if (messageHash === this.lastMessageHash) return false
+
+    // Only check history for assistant messages to prevent duplicate streaming
+    if (jsonData.type === 'assistant' && this.messageHistory.has(messageHash)) return false
+
+    // Track message
+    this.lastMessageHash = messageHash
+    if (jsonData.type === 'assistant') {
+      this.messageHistory.add(messageHash)
+      if (this.messageHistory.size > CONFIG.MESSAGE_HISTORY_LIMIT) {
+        const firstHash = this.messageHistory.values().next().value
+        if (firstHash) this.messageHistory.delete(firstHash)
+      }
+    }
+
+    // Always show non-assistant messages (including Claude JSON responses)
+    return true
+  }
+
+  private createMessage(data: any): string | null {
+    try {
+      // Handle different message types clearly
+      if (data.type === 'assistant') {
+        return this.createAssistantMessage(data)
+      } else if (data.type === 'user') {
+        return this.createUserMessage(data)
+      } else if (data.type === 'system') {
+        return this.createSystemMessage(data)
+      } else if (data.type === 'result') {
+        return this.createResultMessage(data)
+      } else if (data.type === 'claude_response') {
+        return this.createClaudeResponseMessage(data)
+      } else {
+        return this.createFallbackMessage(data)
+      }
+    } catch (error) {
+      console.error('Error creating message:', error)
+      return this.createErrorMessage(data)
+    }
+  }
+
+  private clearMessages(): void {
+    this.lastMessageHash = ''
+    this.messageHistory.clear()
+  }
+
+  // Helper methods for message creation
+  private createAssistantMessage(data: any): string | null {
+    if (!data.message?.content) return null
+
+    const extracted = this.extractContentFromAssistant(data.message.content)
+
+    // Regular assistant message - escape HTML for safety
+    const meta = data.message?.usage ?
+      `${data.message.usage.input_tokens || 0}↑ ${data.message.usage.output_tokens || 0}↓` : ''
+
+    return this.formatMessage(extracted.text, extracted.badge, meta)
+  }
+
+  private createUserMessage(data: any): string | null {
+    if (!data.message?.content) return null
+
+    const extracted = this.extractContentFromUser(data.message.content)
+
+    // Escape HTML for user messages
+    return this.formatMessage(extracted.text, extracted.badge)
+  }
+
+  private createSystemMessage(data: any): string {
+    const content = `System: ${data.subtype || 'message'}`
+    const meta = data.cwd ? data.cwd : ''
+    return this.formatMessage(content, 'System', meta)
+  }
+
+  private createResultMessage(data: any): string {
+    const content = data.result || 'Task completed'
+    return this.formatMessage(content, 'Result')
+  }
+
+  private createClaudeResponseMessage(response: any): string {
+    // Create a summary content showing key metrics instead of the full text result
+    let content = ''
+    // Show timing information
+    if (response.duration_ms) {
+      content += `<strong>Total Time:</strong> ${response.duration_ms}ms`
+      if (response.duration_api_ms) {
+        content += ` (API: ${response.duration_api_ms}ms)`
+      }
+      content += '<br>'
+    }
+
+    // Show cost information
+    if (response.total_cost_usd) {
+      content += `<strong>Cost:</strong> $${response.total_cost_usd.toFixed(4)}<br>`
+    }
+
+    // Show token usage
+    if (response.usage) {
+      const usage = response.usage
+      const tokens = []
+      if (usage.input_tokens) tokens.push(`${usage.input_tokens}↑`)
+      if (usage.output_tokens) tokens.push(`${usage.output_tokens}↓`)
+      if (usage.cache_read_input_tokens) tokens.push(`${usage.cache_read_input_tokens}(cached)`)
+      if (tokens.length > 0) {
+        content += `<strong>Tokens:</strong> ${tokens.join(' ')}<br>`
+      }
+    }
+
+    // Show turn count
+    if (response.num_turns) {
+      content += `<strong>Turns:</strong> ${response.num_turns}<br>`
+    }
+    return this.formatMessage(content, 'Claude Complete', "")
+  }
+
+  private createFallbackMessage(data: any): string {
+    // For Claude JSON responses that don't match known types
+    // Display them in a readable format
+    const content = typeof data === 'string'
+      ? data
+      : JSON.stringify(data, null, 2)
+
+    // Truncate if too long but ensure we always show something
+    const displayContent = content.length > CONFIG.MAX_CONTENT_LENGTH
+      ? content.substring(0, CONFIG.MAX_CONTENT_LENGTH) + '...'
+      : content
+
+    // Wrap JSON in a pre/code block for better formatting
+    const formattedContent = typeof data === 'object'
+      ? `<pre style="background:#f5f5f5;padding:6px;border-radius:4px;overflow-x:auto;font-size:8px"><code>${displayContent}</code></pre>`
+      : displayContent
+
+    return this.formatMessage(formattedContent, 'Claude')
+  }
+
+  private createErrorMessage(data: any): string {
+    const errorContent = `<pre style="background:#fee;padding:6px;border-radius:4px;overflow-x:auto;font-size:8px"><code>${JSON.stringify(data)}</code></pre>`
+    return this.formatMessage(errorContent, 'Error')
+  }
+
+  private formatMessage(content: string, badge?: string, meta?: string): string {
+    const badgeHtml = badge ? `<div class="message-badge">${badge}</div>` : ''
+    const metaHtml = meta ? `<div class="message-meta">${meta}</div>` : ''
+    // Don't escape HTML in content since we're now using HTML formatting
+    return `<div class="message-wrapper">${badgeHtml}<div class="message-content">${content}</div>${metaHtml}</div>`
+  }
+
+  private formatTodoList(input: any): string {
+    if (!input || !input.todos || !Array.isArray(input.todos)) {
+      return '<div>No todos found</div>'
+    }
+
+    const todos = input.todos
+    let html = '<div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px; margin: 4px 0;">'
+    html += '<div style="font-weight: 600; color: #374151; margin-bottom: 6px; font-size: 12px;">📝 Todo List</div>'
+
+    todos.forEach((todo: any) => {
+      const status = todo.status || 'pending'
+      let statusIcon = '⚪'
+      let statusColor = '#6b7280'
+
+      switch (status) {
+        case 'completed':
+          statusIcon = '✅'
+          statusColor = '#059669'
+          break
+        case 'in_progress':
+          statusIcon = '🔄'
+          statusColor = '#dc2626'
+          break
+        case 'pending':
+          statusIcon = '⚪'
+          statusColor = '#6b7280'
+          break
+      }
+
+      html += `<div style="display: flex; align-items: flex-start; gap: 8px; padding: 4px 0; border-bottom: 1px solid #f3f4f6; font-size: 11px;">`
+      html += `<span style="color: ${statusColor}; flex-shrink: 0;">${statusIcon}</span>`
+      html += `<span style="color: #374151; line-height: 1.4;">${HtmlUtils.escapeHtml(todo.content || '')}</span>`
+      html += `</div>`
+    })
+
+    html += '</div>'
+    return html
+  }
+
+  private extractContentFromAssistant(content: any[]): { text: string, badge?: string } {
+    const items = content.map(item => {
+      if (item.type === 'text') {
+        return { text: item.text, badge: undefined }
+      } else if (item.type === 'tool_use') {
+        // Special handling for TodoWrite tool
+        if (item.name === 'TodoWrite') {
+          const todoContent = this.formatTodoList(item.input)
+          return {
+            text: todoContent,
+            badge: item.name
+          }
+        } else {
+          const toolContent = `${item.input ? yaml.dump(item.input, { indent: 2 }) : ''}`
+          return {
+            text: `<pre>${HtmlUtils.escapeHtml(toolContent)}</pre>`,
+            badge: item.name
+          }
+        }
+      }
+      return { text: '', badge: undefined }
+    }).filter(item => item.text)
+    
+    if (items.length === 0) return { text: '' }
+    
+    const toolUseItem = items.find(item => item.badge)
+    if (toolUseItem) {
+      return {
+        text: items.map(item => item.text).join('\n'),
+        badge: toolUseItem.badge
+      }
+    }
+    
+    return { text: items.map(item => item.text).join('\n') }
+  }
+
+  private extractContentFromUser(content: any[]): { text: string, badge?: string } {
+    const items = content.map(item => {
+      if (item.type === 'text') {
+        return { text: item.text, badge: undefined }
+      } else if (item.type === 'tool_result') {
+        const result = typeof item.content === 'string' ? item.content : JSON.stringify(item.content)
+        return { 
+          text: `<pre>${HtmlUtils.escapeHtml(result)}</pre>`,
+          badge: 'Tool Result'
+        }
+      }
+      return { text: '', badge: undefined }
+    })
+    
+    const toolResultItem = items.find(item => item.badge)
+    if (toolResultItem) {
+      return {
+        text: items.filter(item => item.text).map(item => item.text).join('\n'),
+        badge: toolResultItem.badge
+      }
+    }
+
+    const filteredItems = items.filter(item => item.text)
+    if (filteredItems.length === 0) return { text: '' }
+
+    return { text: filteredItems.map(item => item.text).join('\n') }
+  }
+
+  private hashMessage(jsonData: any): string {
+    let content = ''
+    if (jsonData.type === 'assistant' && jsonData.message?.content) {
+      content = this.extractContentFromAssistant(jsonData.message.content).text
+    } else if (jsonData.type === 'user' && jsonData.message?.content) {
+      content = this.extractContentFromUser(jsonData.message.content).text
+    } else {
+      content = JSON.stringify(jsonData)
+    }
+    
+    return HtmlUtils.hashString(content || '')
   }
 }
 
