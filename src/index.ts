@@ -8,6 +8,7 @@ interface ServerInstance {
   server: any
   wss: any
   port: number
+  verbose: boolean
 }
 
 let serverInstance: ServerInstance | null = null
@@ -55,8 +56,24 @@ if (versionFlag) {
   process.exit(0)
 }
 
-// Parse port
+// Parse port and verbose settings
 let port = 7318
+const isVerbose = process.env.VERBOSE === 'true'
+
+// Check environment variables for port override
+if (process.env.INSPECTOR_PORT) {
+  const envPort = parseInt(process.env.INSPECTOR_PORT, 10)
+  if (!isNaN(envPort) && envPort > 0 && envPort < 65536) {
+    port = envPort
+  }
+} else if (process.env.PORT) {
+  const envPort = parseInt(process.env.PORT, 10)
+  if (!isNaN(envPort) && envPort > 0 && envPort < 65536) {
+    port = envPort
+  }
+}
+
+// CLI arguments override environment variables
 if (portFlag !== -1 && args[portFlag + 1]) {
   const parsedPort = parseInt(args[portFlag + 1], 10)
   if (!isNaN(parsedPort) && parsedPort > 0 && parsedPort < 65536) {
@@ -101,7 +118,7 @@ async function main() {
       process.exit(1)
     }
 
-    serverInstance = await startServer(port)
+    serverInstance = await startServer(port, isVerbose)
     console.log(`✅ Server running on http://localhost:${port}`)
     console.log(`📋 Add to your webpage: <script src="http://localhost:${port}/inspector-toolbar.js"></script>`)
     console.log(`⏹️  Ctrl+C to stop`)

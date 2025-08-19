@@ -16,9 +16,10 @@ interface ServerInstance {
   server: Server
   wss: WebSocketServer
   port: number
+  verbose: boolean
 }
 
-function setupRoutes(app: Express): void {
+function setupRoutes(app: Express, verbose: boolean): void {
   app.get('/inspector-toolbar.js', (req, res) => {
     try {
       // In production, the inspector-toolbar.js should be in the same folder as the built server
@@ -38,6 +39,7 @@ function setupRoutes(app: Express): void {
 const toolbar = document.createElement('inspector-toolbar');
 toolbar.setAttribute('ai-endpoint', '${host}');
 toolbar.setAttribute('cwd', '${cwd}');
+toolbar.setAttribute('verbose', '${verbose}');
 document.body.prepend(toolbar);
 `
       res.send(fileContent + injectionCode)
@@ -48,7 +50,7 @@ document.body.prepend(toolbar);
   })
 }
 
-export async function startServer(port: number): Promise<ServerInstance> {
+export async function startServer(port: number, verbose = false): Promise<ServerInstance> {
   const app = express()
   
   app.use(cors({
@@ -59,13 +61,13 @@ export async function startServer(port: number): Promise<ServerInstance> {
   
   app.use(express.json({ limit: '10mb' }))
   
-  setupRoutes(app)
+  setupRoutes(app, verbose)
   
   app.use(
     '/trpc',
     createExpressMiddleware({
       router: appRouter,
-      createContext,
+      createContext: (opts) => createContext(opts, verbose),
     })
   )
   
@@ -79,19 +81,19 @@ export async function startServer(port: number): Promise<ServerInstance> {
   applyWSSHandler({
     wss,
     router: appRouter,
-    createContext: createWSSContext,
+    createContext: (opts) => createWSSContext(opts, verbose),
   })
   
   wss.on('connection', (ws) => {
-    console.log(`WebSocket client connected (total: ${wss.clients.size})`)
-    ws.on('error', console.error)
+    if (verbose) console.log(`WebSocket client connected (total: ${wss.clients.size})`)
+    ws.on('error', verbose ? console.error : () => {})
     ws.on('close', () => {
-      console.log(`WebSocket client disconnected (total: ${wss.clients.size})`)
+      if (verbose) console.log(`WebSocket client disconnected (total: ${wss.clients.size})`)
     })
   })
   
   
-  return { app, server, wss, port }
+  return { app, server, wss, port, verbose }
 }
 
 export async function stopServer(serverInstance: ServerInstance): Promise<void> {
@@ -113,7 +115,7 @@ export async function stopServer(serverInstance: ServerInstance): Promise<void> 
     
     // Close WebSocket server
     serverInstance.wss.close((err) => {
-      if (err && !rejected) {
+      if (err && !rejected && serverInstance.verbose) {
         console.error('Error closing WebSocket server:', err)
       }
       wssComplete = true

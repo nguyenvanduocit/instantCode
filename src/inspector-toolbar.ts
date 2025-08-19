@@ -8,6 +8,7 @@ import { createElementSelectionManager, type ElementSelectionManager } from './i
 import { createInspectionManager, type InspectionManager } from './inspector/inspection'
 import { createToolbarStateManager, type ToolbarStateManager } from './inspector/state'
 import { findNearestComponent } from './inspector/detectors'
+import { createLogger, type Logger } from './inspector/logger'
 import { 
   renderToolbar, 
   createMessageFormatter, 
@@ -37,7 +38,7 @@ export class InspectorToolbar extends HTMLElement {
   private aiManager: AIManager
   private inspectionManager: InspectionManager
   private messageFormatter: MessageFormatter
-
+  private logger: Logger
 
   // Event cleanup functions
   private cleanupFunctions: (() => void)[] = []
@@ -46,10 +47,13 @@ export class InspectorToolbar extends HTMLElement {
     super()
     this.attachShadow({ mode: 'open' })
     
+    // Initialize logger first
+    this.logger = createLogger(this.verbose)
+    
     // Initialize managers using factory functions
     this.stateManager = createToolbarStateManager(this.events)
     this.selectionManager = createElementSelectionManager()
-    this.aiManager = createAIManager()
+    this.aiManager = createAIManager(this.verbose)
     this.inspectionManager = createInspectionManager(
       (element) => this.handleElementSelection(element),
       (element) => this.shouldIgnoreElement(element),
@@ -85,6 +89,19 @@ export class InspectorToolbar extends HTMLElement {
       this.removeAttribute('cwd')
     }
   }
+
+  get verbose(): boolean {
+    return this.getAttribute('verbose') === 'true'
+  }
+
+  set verbose(value: boolean) {
+    if (value) {
+      this.setAttribute('verbose', 'true')
+    } else {
+      this.removeAttribute('verbose')
+    }
+  }
+
 
   private render(): void {
     if (!this.shadowRoot) return
@@ -210,7 +227,7 @@ export class InspectorToolbar extends HTMLElement {
     newChatButton?.addEventListener('click', async () => {
       // Prevent new chat while processing
       if (this.stateManager.isProcessing()) {
-        console.log('Cannot start new chat while processing')
+        this.logger.log('Cannot start new chat while processing')
         return
       }
 
@@ -227,10 +244,10 @@ export class InspectorToolbar extends HTMLElement {
           await this.aiManager.newChat()
           this.events.emit('session:updated', { sessionId: this.aiManager.getSessionId() })
         } catch (error) {
-          console.error('Failed to start new chat:', error)
+          this.logger.error('Failed to start new chat:', error)
         }
       } else {
-        console.warn('AI manager not initialized')
+        this.logger.warn('AI manager not initialized')
       }
     })
 
@@ -253,7 +270,7 @@ export class InspectorToolbar extends HTMLElement {
             await this.aiManager.newChat()
             this.events.emit('session:updated', { sessionId: this.aiManager.getSessionId() })
           } catch (error) {
-            console.error('Failed to start new chat after cancel:', error)
+            this.logger.error('Failed to start new chat after cancel:', error)
           }
         }
       }
@@ -287,7 +304,7 @@ export class InspectorToolbar extends HTMLElement {
     if (this.selectionManager.hasElement(element)) {
       this.selectionManager.deselectElement(element)
     } else {
-      this.selectionManager.selectElement(element, findNearestComponent)
+      this.selectionManager.selectElement(element, (el) => findNearestComponent(el, this.verbose))
     }
     const hasSelectedElements = this.selectionManager.getSelectedCount() > 0
     updateClearButtonVisibility(this.shadowRoot, hasSelectedElements)
@@ -319,17 +336,17 @@ export class InspectorToolbar extends HTMLElement {
 
   private async handlePromptSubmit(prompt: string): Promise<void> {
     if (!prompt) {
-      console.log('Empty prompt, nothing to process')
+      this.logger.log('Empty prompt, nothing to process')
       return
     }
 
     if (this.stateManager.isProcessing()) {
-      console.log('Already processing, ignoring new prompt')
+      this.logger.log('Already processing, ignoring new prompt')
       return
     }
 
-    console.log('AI Prompt submitted:', prompt)
-    console.log('Selected elements:', Array.from(this.selectionManager.getSelectedElements().keys()))
+    this.logger.log('AI Prompt submitted:', prompt)
+    this.logger.log('Selected elements:', Array.from(this.selectionManager.getSelectedElements().keys()))
 
     // Exit inspection mode when prompt is submitted
     if (this.inspectionManager.isInInspectionMode()) {
@@ -338,13 +355,13 @@ export class InspectorToolbar extends HTMLElement {
 
     const pageInfo = this.getCurrentPageInfo()
     const selectedElementsHierarchy = this.selectionManager.buildHierarchicalStructure(
-      findNearestComponent
+      (el) => findNearestComponent(el, this.verbose)
     )
 
     if (this.aiEndpoint) {
       await this.callAI(prompt, selectedElementsHierarchy, pageInfo)
     } else {
-      console.warn('No AI endpoint provided. Set the ai-endpoint attribute to use AI features.')
+      this.logger.warn('No AI endpoint provided. Set the ai-endpoint attribute to use AI features.')
     }
   }
 
@@ -357,7 +374,7 @@ export class InspectorToolbar extends HTMLElement {
 
   private async callAI(prompt: string, selectedElements: ElementData[], pageInfo: PageInfo): Promise<void> {
     if (!this.aiEndpoint) {
-      console.warn('No AI endpoint specified')
+      this.logger.warn('No AI endpoint specified')
       return
     }
 
@@ -392,7 +409,7 @@ export class InspectorToolbar extends HTMLElement {
           }
         },
         onError: (error) => {
-          console.error('AI subscription error:', error)
+          this.logger.error('AI subscription error:', error)
           showNotification('Failed to send message', 'error')
           this.setProcessingState(false)
         },
@@ -409,12 +426,12 @@ export class InspectorToolbar extends HTMLElement {
         messageHandler
       )
     } catch (error) {
-      console.error('Error calling AI endpoint:', error)
+      this.logger.error('Error calling AI endpoint:', error)
 
       if (promptInput) promptInput.value = originalPromptText
       this.setProcessingState(false)
 
-      console.error('Error calling AI endpoint:', (error as Error).message || 'Failed to connect to AI service')
+      this.logger.error('Error calling AI endpoint:', (error as Error).message || 'Failed to connect to AI service')
     }
   }
 

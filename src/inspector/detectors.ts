@@ -2,6 +2,8 @@
  * Framework component detection and file location extraction
  */
 
+import { createLogger } from './logger'
+
 export interface ComponentInfo {
   componentLocation: string
   componentName?: string
@@ -10,8 +12,10 @@ export interface ComponentInfo {
 /**
  * Find the nearest component in the DOM tree
  */
-export function findNearestComponent(element: Element): ComponentInfo | null {
+export function findNearestComponent(element: Element, verbose = false): ComponentInfo | null {
   if (!element || element === document.body) return null
+
+  const logger = createLogger(verbose)
 
   try {
     // Try Vue detection first (works for Vue 2 and Vue 3)
@@ -19,9 +23,9 @@ export function findNearestComponent(element: Element): ComponentInfo | null {
     
     // Debug logging
     if (componentInfo) {
-      console.log('🟢 Vue component found:', componentInfo)
+      logger.log('🟢 Vue component found:', componentInfo)
     } else {
-      console.log('🔍 No Vue component found for element:', element.tagName, 'Checking properties:', {
+      logger.log('🔍 No Vue component found for element:', element.tagName, 'Checking properties:', {
         __vnode: !!(element as any).__vnode,
         __vueParentComponent: !!(element as any).__vueParentComponent,
         __vue__: !!(element as any).__vue__,
@@ -33,7 +37,7 @@ export function findNearestComponent(element: Element): ComponentInfo | null {
     if (!componentInfo) {
       componentInfo = getVanillaComponentInfo(element)
       if (componentInfo) {
-        console.log('🟡 Vanilla component found:', componentInfo)
+        logger.log('🟡 Vanilla component found:', componentInfo)
       }
     }
 
@@ -41,9 +45,9 @@ export function findNearestComponent(element: Element): ComponentInfo | null {
       return componentInfo
     }
 
-    return findNearestComponent(element.parentElement!)
+    return findNearestComponent(element.parentElement!, verbose)
   } catch (e) {
-    console.error('Error finding nearest component:', e)
+    logger.error('Error finding nearest component:', e)
     return null
   }
 }
