@@ -863,9 +863,8 @@ export class InspectorToolbar extends LitElement {
 
     todos.forEach(todo => {
       const statusIcon = this.getStatusIcon(todo.status)
-      const statusColor = this.getStatusColor(todo.status)
       html += `<div style="margin: 4px 0; display: flex; align-items: flex-start; gap: 8px;">
-        <span style="color: ${statusColor}; font-size: 16px; line-height: 1.2; margin-top: 1px;">${statusIcon}</span>
+        <span style="display: inline-flex; align-items: center; margin-top: 1px;">${statusIcon}</span>
         <span style="flex: 1; color: ${todo.status === 'completed' ? '#666' : 'inherit'}; ${todo.status === 'completed' ? 'text-decoration: line-through;' : ''}">${HtmlUtils.escapeHtml(todo.content)}</span>
       </div>`
     })
