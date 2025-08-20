@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.9.1](https://github.com/nguyenvanduocit/instantCode/compare/v1.9.0...v1.9.1) (2025-08-20)
+
+
+### Bug Fixes
+
+* **inspector:** remove message deduplication causing init message to disappear ([3705fb0](https://github.com/nguyenvanduocit/instantCode/commit/3705fb0ee412b420261f5b9ece8e463e866050e4))
+
 ## [1.9.0](https://github.com/nguyenvanduocit/instantCode/compare/v1.8.0...v1.9.0) (2025-08-19)
 
 
