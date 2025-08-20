@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.9.2](https://github.com/nguyenvanduocit/instantCode/compare/v1.9.1...v1.9.2) (2025-08-20)
+
+
+### Bug Fixes
+
+* **inspector:** exit inspect mode when closing card with toggle ([78d18b4](https://github.com/nguyenvanduocit/instantCode/commit/78d18b4468607135eb63aad03b19e291a64aeaae))
+* **inspector:** exit inspect mode when closing card with toggle ([7012fc7](https://github.com/nguyenvanduocit/instantCode/commit/7012fc7dc9123272436d091477074c7eff6f3544))
+
 ## [1.9.1](https://github.com/nguyenvanduocit/instantCode/compare/v1.9.0...v1.9.1) (2025-08-20)
 
 
