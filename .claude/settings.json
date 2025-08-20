@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|NotebookEdit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "IFS= read -r PAYLOAD; SESSION_ID=$(jq -r .session_id <<<\"$PAYLOAD\"); \"/Users/firegroup/.bun/bin/claude\" --dangerously-skip-permissions -p -r \"$SESSION_ID\" \"Look at all the changes made using git diff and then git add -A && git commit -m 'short message' -m 'detailed body'. The short message should be under 75 chars like 'fix(auth): correct login validation' and use the conventional commit format - type(scope): description where type is feat/fix/docs/refactor/chore/etc. Consider the user's intent of these changes when crafting the short message. The body should comprehensively describe everything that changed.\""
+          }
+        ]
+      }
+    ]
+  }
+}
