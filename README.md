@@ -1,5 +1,8 @@
 # InstantCode - AI-Powered Web Development Assistant
 
+[![Watch the Tutorial](https://img.youtube.com/vi/OuKnfCbmfTg/maxresdefault.jpg)](https://youtu.be/OuKnfCbmfTg)
+> 📺 **[Watch the Tutorial Video](https://youtu.be/OuKnfCbmfTg)** - See InstantCode in action!
+
 Get instant AI assistance for any element on your webpage! InstantCode integrates seamlessly with your Vite development workflow, automatically injecting an AI inspector that helps you understand, debug, and improve your code in real-time.
 
 ## What is InstantCode?
