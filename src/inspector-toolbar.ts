@@ -876,10 +876,14 @@ export class InspectorToolbar extends LitElement {
 
   private getStatusIcon(status: string): string {
     switch (status) {
-      case 'completed': return '✅'
-      case 'in_progress': return '🔄'
-      case 'pending': return '⏳'
-      default: return '❓'
+      case 'completed': 
+        return '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="7" fill="#28a745"/><path d="M11.5 5.5L6.5 10.5L4.5 8.5" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+      case 'in_progress': 
+        return '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M8 1.5C4.41 1.5 1.5 4.41 1.5 8C1.5 11.59 4.41 14.5 8 14.5C11.59 14.5 14.5 11.59 14.5 8" stroke="#007acc" stroke-width="1.5" stroke-linecap="round"/><path d="M8 4V8L10.5 10.5" stroke="#007acc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+      case 'pending': 
+        return '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6.5" stroke="#ffc107" stroke-width="1.5"/><path d="M8 5V8L10 10" stroke="#ffc107" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+      default: 
+        return '<svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="8" cy="8" r="6.5" stroke="#6c757d" stroke-width="1.5"/><path d="M8 5V9" stroke="#6c757d" stroke-width="1.5" stroke-linecap="round"/><circle cx="8" cy="11.5" r="0.75" fill="#6c757d"/></svg>'
     }
   }
 
