@@ -127,7 +127,7 @@ export class InspectorToolbar extends LitElement {
 
   private collapseToolbar(): void {
     this.isExpanded = false
-    this.isInspecting = false
+    // Don't set isInspecting to false here - let the caller handle it
   }
 
   private enterInspectionModeInternal(): void {
