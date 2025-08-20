@@ -3,19 +3,15 @@
 [![Watch the Tutorial](https://img.youtube.com/vi/OuKnfCbmfTg/maxresdefault.jpg)](https://youtu.be/OuKnfCbmfTg)
 > 📺 **[Watch the Tutorial Video](https://youtu.be/OuKnfCbmfTg)** - See InstantCode in action!
 
-Get instant AI assistance for any element on your webpage! InstantCode integrates seamlessly with your Vite development workflow, automatically injecting an AI inspector that helps you understand, debug, and improve your code in real-time.
+## What can this plugin help you?
 
-## What is InstantCode?
+After installing the plugin, you can:
+- **Point directly at any element** on your webapp
+- **Type a short request** like "make it bigger", "center it", "change color to blue"
+- **Wait for AI to modify your code** - it automatically finds and updates the source files
+- **See instant results** - your changes appear immediately in the browser
 
-InstantCode is an AI-powered web development tool that lets you click on any element in your application and get intelligent help about it. Perfect for debugging, learning frameworks, or getting suggestions for improvements.
-
-✨ **Key Benefits:**
-- 🎯 **Point & Click**: Select any element to get contextual help
-- 🤖 **AI Assistant**: Powered by Claude Code for intelligent insights
-- 🔍 **Smart Detection**: Auto-detects React, Vue, Angular, Svelte components
-- 💬 **Natural Conversations**: Ask questions in plain English
-- ⚡ **Zero Configuration**: Works out of the box with Vite
-- 🔧 **Development Focused**: Integrates directly into your dev workflow
+No need to search through files or remember CSS properties - just point and tell!
 
 ## Prerequisites
 
@@ -71,20 +67,6 @@ yarn dev
 
 That's it! The InstantCode toolbar will automatically appear in your application.
 
-### 4. Start Getting Help!
-
-1. **Look for the toolbar** - appears as a small widget in your app
-2. **Click "Select Element"** to enter selection mode
-3. **Click any element** you want help with
-4. **Ask questions** like:
-   - "How do I change this component's styling?"
-   - "Why isn't this button working?"
-   - "How can I make this responsive?"
-   - "What props does this component accept?"
-
-
-For installation help, visit: https://docs.anthropic.com/en/docs/claude-code
-
 ## Plugin Configuration
 
 The Vite plugin accepts these options:
@@ -105,16 +87,6 @@ Set `mock: true` in the plugin options to develop UI without Claude Code install
 ```bash
 INSTANTCODE_MOCK=true bunx instantcode
 ```
-
-## What Happens When You Use the Plugin?
-
-When you add InstantCode to your Vite project:
-
-1. **🚀 Auto-Start**: Inspector server starts automatically with `vite dev`
-2. **💉 Auto-Inject**: Toolbar is automatically added to your app
-3. **🎯 Smart Context**: AI understands your project structure and codebase
-4. **🛑 Clean Shutdown**: Server stops gracefully when you stop Vite
-5. **🔄 Hot Reload**: Maintains connection during HMR updates
 
 ## Framework Support
 
@@ -173,13 +145,6 @@ The server automatically checks port availability. If you see this error:
 1. Stop any existing InstantCode servers
 2. Check what's using port 7318: `lsof -i :7318`
 3. Kill the process or restart your machine
-
-## Tips for Best Results
-
-- 🎯 **Be Specific**: "How do I center this div?" vs "Fix this"
-- 📁 **Project Context**: Always run from your project directory
-- 🎨 **Element Selection**: Click the exact element you're asking about
-- 💭 **Clear Questions**: Ask what you want to accomplish, not just what's broken
 
 ---
 
