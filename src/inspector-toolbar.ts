@@ -560,11 +560,12 @@ export class InspectorToolbar extends LitElement {
         this.enterInspectionModeInternal()
       }
     } else {
-      this.collapseToolbar()
-
+      // Exit inspection mode first if active
       if (this.isInspecting) {
         this.exitInspectionModeInternal()
       }
+      
+      this.collapseToolbar()
       this.clearSelection()
       this.clearPrompt()
     }
