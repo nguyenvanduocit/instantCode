@@ -83,8 +83,6 @@ export class InspectorToolbar extends LitElement {
 
 
   // Message formatter state
-  private lastMessageHash = ''
-  private messageHistory = new Set<string>()
   private todoWriteToolIds = new Set<string>()
 
   static styles = TOOLBAR_STYLES
@@ -180,8 +178,6 @@ export class InspectorToolbar extends LitElement {
 
   private clearMessagesInternal(): void {
     this.messages = []
-    this.lastMessageHash = ''
-    this.messageHistory.clear()
     this.todoWriteToolIds.clear()
   }
 
@@ -853,22 +849,7 @@ export class InspectorToolbar extends LitElement {
   }
 
   private shouldShowMessage(jsonData: SendMessageResponse): boolean {
-    // Always show messages that don't have a hash (empty content)
-    const messageHash = this.hashMessage(jsonData)
-    if (!messageHash) return true
-
-    // Skip exact consecutive duplicates
-    if (messageHash === this.lastMessageHash) return false
-
-    // Track message
-    this.lastMessageHash = messageHash
-    this.messageHistory.add(messageHash)
-    if (this.messageHistory.size > CONFIG.MESSAGE_HISTORY_LIMIT) {
-      const firstHash = this.messageHistory.values().next().value
-      if (firstHash) this.messageHistory.delete(firstHash)
-    }
-
-    // Always show messages
+    // Always show all messages - no deduplication needed
     return true
   }
 
@@ -944,14 +925,6 @@ export class InspectorToolbar extends LitElement {
     return `${badgeHtml}<div class="message-content">${content}</div>${metaHtml}</div>`
   }
 
-  private hashMessage(jsonData: SendMessageResponse): string {
-    const content = ('message' in jsonData
-      ? typeof jsonData.message === 'string'
-        ? jsonData.message
-        : JSON.stringify(jsonData.message)
-      : JSON.stringify(jsonData))
-    return HtmlUtils.hashString(content || '')
-  }
 }
 
 // Register the custom element
