@@ -16,11 +16,13 @@ export interface ServerInstance {
   server: Server
   wss: WebSocketServer
   port: number
+  listenAddress: string
+  publicAddress: string
   verbose: boolean
   isMock: boolean
 }
 
-function setupRoutes(app: Express, verbose: boolean): void {
+function setupRoutes(app: Express, publicAddress: string, verbose: boolean): void {
   app.get('/inspector-toolbar.js', (req, res) => {
     try {
       // In production, the inspector-toolbar.js should be in the same folder as the built server
@@ -33,12 +35,12 @@ function setupRoutes(app: Express, verbose: boolean): void {
 
       res.setHeader('Content-Type', 'application/javascript')
 
-      const host = `${req.protocol}://${req.get('host')}`
+      // Use public address for client connections
       const cwdArgument = req.query.cwd ? String(req.query.cwd) : ''
       const cwd = cwdArgument || process.cwd()
       const injectionCode = `
 const toolbar = document.createElement('inspector-toolbar');
-toolbar.setAttribute('ai-endpoint', '${host}');
+toolbar.setAttribute('ai-endpoint', '${publicAddress}');
 toolbar.setAttribute('cwd', '${cwd}');
 toolbar.setAttribute('verbose', '${verbose}');
 document.body.prepend(toolbar);
@@ -51,7 +53,13 @@ document.body.prepend(toolbar);
   })
 }
 
-export async function startServer(port: number, verbose = false, isMock = false): Promise<ServerInstance> {
+export async function startServer(
+  port: number,
+  listenAddress: string,
+  publicAddress: string,
+  verbose = false,
+  isMock = false
+): Promise<ServerInstance> {
   const app = express()
   
   app.use(cors({
@@ -62,7 +70,7 @@ export async function startServer(port: number, verbose = false, isMock = false)
   
   app.use(express.json({ limit: '10mb' }))
   
-  setupRoutes(app, verbose)
+  setupRoutes(app, publicAddress, verbose)
   
   app.use(
     '/trpc',
@@ -72,7 +80,7 @@ export async function startServer(port: number, verbose = false, isMock = false)
     })
   )
   
-  const server = await listen(app, port)
+  const server = await listen(app, port, listenAddress)
   
   const wss = new WebSocketServer({
     server,
@@ -94,7 +102,7 @@ export async function startServer(port: number, verbose = false, isMock = false)
   })
   
   
-  return { app, server, wss, port, verbose, isMock }
+  return { app, server, wss, port, listenAddress, publicAddress, verbose, isMock }
 }
 
 export async function stopServer(serverInstance: ServerInstance): Promise<void> {
@@ -164,7 +172,7 @@ async function checkPortAvailable(port: number): Promise<boolean> {
   })
 }
 
-function listen(app: Express, port: number): Promise<Server> {
+function listen(app: Express, port: number, listenAddress: string): Promise<Server> {
   return new Promise(async (resolve, reject) => {
     const isPortAvailable = await checkPortAvailable(port)
     
@@ -173,7 +181,7 @@ function listen(app: Express, port: number): Promise<Server> {
       return
     }
     
-    const server = app.listen(port, () => resolve(server))
+    const server = app.listen(port, listenAddress, () => resolve(server))
     server.on('error', (error: any) => {
       reject(error)
     })
