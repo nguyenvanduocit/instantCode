@@ -6,6 +6,21 @@ import { existsSync } from 'node:fs';
 
 export interface InspectorPluginOptions {
   /**
+   * Port to run the server on
+   * @default 7318
+   */
+  port?: number;
+  /**
+   * Address for the server to listen on
+   * @default 'localhost'
+   */
+  listenAddress?: string;
+  /**
+   * Public URL for reverse proxy scenarios
+   * @default Automatically determined from listenAddress and port
+   */
+  publicAddress?: string;
+  /**
    * Verbose logging
    * @default false
    */
@@ -22,12 +37,25 @@ class InspectorServerManager {
   private options: Required<InspectorPluginOptions>;
   private packageDir: string;
   private isDevelopment: boolean;
+  private publicAddress: string;
 
   constructor(options: InspectorPluginOptions = {}) {
     this.options = {
+      port: options.port ?? 7318,
+      listenAddress: options.listenAddress ?? 'localhost',
+      publicAddress: options.publicAddress ?? '',
       verbose: options.verbose ?? false,
       mock: options.mock ?? false,
     };
+    
+    // Set public address with smart defaults
+    if (this.options.publicAddress) {
+      this.publicAddress = this.options.publicAddress;
+    } else {
+      // Auto-determine public address
+      const host = this.options.listenAddress === '0.0.0.0' ? 'localhost' : this.options.listenAddress;
+      this.publicAddress = `http://${host}:${this.options.port}`;
+    }
 
     // Detect if we're running from source or from installed package
     // @ts-ignore - import.meta is available in ESM builds
@@ -86,7 +114,12 @@ class InspectorServerManager {
       }
     }
 
-    // Add CLI arguments for verbose and mock modes
+    // Add CLI arguments
+    args.push('--port', String(this.options.port));
+    args.push('--listen', this.options.listenAddress);
+    if (this.publicAddress !== `http://${this.options.listenAddress}:${this.options.port}`) {
+      args.push('--public-address', this.publicAddress);
+    }
     if (this.options.verbose) {
       args.push('--verbose');
     }
@@ -176,7 +209,7 @@ class InspectorServerManager {
       ...(cwd && { cwd }),
     });
 
-    return `<script src="http://localhost:7318/inspector-toolbar.js?${params}" type="module" async></script>`;
+    return `<script src="${this.publicAddress}/inspector-toolbar.js?${params}" type="module" async></script>`;
   }
 
   shouldInject(): boolean {

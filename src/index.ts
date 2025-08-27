@@ -13,6 +13,8 @@ const versionFlag = args.includes('--version') || args.includes('-v')
 const mockFlag = args.includes('--mock') || args.includes('-m')
 const verboseFlag = args.includes('--verbose') || args.includes('-V')
 const portFlag = args.findIndex(arg => arg === '--port' || arg === '-p')
+const listenFlag = args.findIndex(arg => arg === '--listen' || arg === '-l')
+const publicAddressFlag = args.findIndex(arg => arg === '--public-address' || arg === '-a')
 
 if (helpFlag) {
   console.log(`
@@ -23,15 +25,19 @@ Usage:
   npx instantcode [options]
 
 Options:
-  -p, --port <number>    Port to run the server on (default: 7318)
-  -m, --mock            Enable mock mode (skip Claude Code, use sample responses)
-  -V, --verbose         Enable verbose logging
-  -h, --help            Show this help message
-  -v, --version         Show version number
+  -p, --port <number>           Port to run the server on (default: 7318)
+  -l, --listen <address>        Address to bind server to (default: localhost)
+  -a, --public-address <url>    Public URL for reverse proxy (default: http://localhost:7318)
+  -m, --mock                    Enable mock mode (skip Claude Code, use sample responses)
+  -V, --verbose                 Enable verbose logging
+  -h, --help                    Show this help message
+  -v, --version                 Show version number
 
 Examples:
-  bunx instantcode                    # Start on default port 7318
+  bunx instantcode                    # Start on localhost:7318
   bunx instantcode --port 8080        # Start on port 8080
+  bunx instantcode --listen 0.0.0.0   # Listen on all interfaces
+  bunx instantcode --public-address https://ai.example.com  # Use with reverse proxy
   bunx instantcode --mock             # Start in mock mode
   bunx instantcode --verbose          # Start with verbose logging
   
@@ -54,8 +60,10 @@ if (versionFlag) {
   process.exit(0)
 }
 
-// Parse port, verbose, and mock settings from CLI args
+// Parse port, addresses, verbose, and mock settings from CLI args
 let port = 7318
+let listenAddress = 'localhost'
+let publicAddress = ''
 const isVerbose = verboseFlag || process.env.VERBOSE === 'true'
 const isMock = mockFlag
 
@@ -81,6 +89,33 @@ if (portFlag !== -1 && args[portFlag + 1]) {
     console.error('❌ Invalid port number. Please provide a number between 1 and 65535.')
     process.exit(1)
   }
+}
+
+// Parse listen address
+if (listenFlag !== -1 && args[listenFlag + 1]) {
+  listenAddress = args[listenFlag + 1]
+  // Validate listen address
+  if (!['localhost', '127.0.0.1', '0.0.0.0', '::1', '::'].includes(listenAddress)) {
+    console.error('❌ Invalid listen address. Use localhost, 127.0.0.1, 0.0.0.0, ::1, or ::')
+    process.exit(1)
+  }
+}
+
+// Parse public address
+if (publicAddressFlag !== -1 && args[publicAddressFlag + 1]) {
+  publicAddress = args[publicAddressFlag + 1]
+  // Basic URL validation
+  try {
+    new URL(publicAddress)
+  } catch (error) {
+    console.error('❌ Invalid public address. Please provide a valid URL (e.g., https://ai.example.com)')
+    process.exit(1)
+  }
+}
+
+// Default public address if not specified
+if (!publicAddress) {
+  publicAddress = `http://${listenAddress === '0.0.0.0' ? 'localhost' : listenAddress}:${port}`
 }
 
 function checkClaudeCodeInstallation(): boolean {
@@ -121,9 +156,10 @@ async function main() {
       console.log('🧪 Starting in MOCK mode - skipping Claude Code check')
     }
 
-    serverInstance = await startServer(port, isVerbose, isMock)
-    console.log(`✅ Server running on http://localhost:${port}`)
-    console.log(`📋 Add to your webpage: <script src="http://localhost:${port}/inspector-toolbar.js"></script>`)
+    serverInstance = await startServer(port, listenAddress, publicAddress, isVerbose, isMock)
+    console.log(`✅ Server listening on ${listenAddress}:${port}`)
+    console.log(`🌐 Public address: ${publicAddress}`)
+    console.log(`📋 Add to your webpage: <script src="${publicAddress}/inspector-toolbar.js"></script>`)
     console.log(`⏹️  Ctrl+C to stop`)
   } catch (error: any) {
     console.error('❌ Failed to start server:', error.message)
