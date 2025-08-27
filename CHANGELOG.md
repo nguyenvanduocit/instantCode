@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.10.0](https://github.com/nguyenvanduocit/instantCode/compare/v1.9.2...v1.10.0) (2025-08-27)
+
+
+### Features
+
+* **config:** add configurable listen and public addresses ([49d8a25](https://github.com/nguyenvanduocit/instantCode/commit/49d8a2533237494d29394268867243bddf52af4f))
+* **server:** add configurable listen and public addresses ([6c13e3c](https://github.com/nguyenvanduocit/instantCode/commit/6c13e3c8d78613b0b94ab99a0b1f39091b85770b))
+
 ## [1.9.2](https://github.com/nguyenvanduocit/instantCode/compare/v1.9.1...v1.9.2) (2025-08-20)
 
 
