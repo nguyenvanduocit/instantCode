@@ -73,12 +73,35 @@ The Vite plugin accepts these options:
 
 ```typescript
 inspectorPlugin({
-  verbose: false,  // Enable detailed logging (default: false)
-  mock: false,     // Enable mock mode to stream deterministic sample responses (default: false)
+  port: 7318,                            // Port to run server on (default: 7318)
+  listenAddress: 'localhost',            // Server binding address (default: 'localhost')
+  publicAddress: 'https://ai.example.com', // Public URL for reverse proxy (optional)
+  verbose: false,                        // Enable detailed logging (default: false)
+  mock: false,                          // Enable mock mode (default: false)
 })
 ```
 
-**Note**: The server automatically runs on port 7318 and auto-injects the toolbar - no additional configuration needed!
+### Address Configuration
+
+**Basic Setup** (default):
+- Server listens on `localhost:7318`
+- Toolbar uses `http://localhost:7318`
+
+**Reverse Proxy Setup**:
+```typescript
+inspectorPlugin({
+  listenAddress: 'localhost',           // Server binds to localhost
+  publicAddress: 'https://ai.mysite.com' // Toolbar uses public URL
+})
+```
+
+**Listen on All Interfaces**:
+```typescript
+inspectorPlugin({
+  listenAddress: '0.0.0.0',  // Allow external connections
+  port: 7318
+})
+```
 
 ### Mock mode
 
@@ -108,16 +131,48 @@ If you prefer manual control or aren't using Vite:
 # Navigate to your project directory first (important for context!)
 cd /path/to/your/project
 
-# Start the server
+# Start the server (basic)
 bunx instantcode@latest
+
+# With custom port
+bunx instantcode --port 8080
+
+# Listen on all interfaces
+bunx instantcode --listen 0.0.0.0
+
+# Use with reverse proxy
+bunx instantcode --listen localhost --public-address https://ai.example.com
+
+# Enable verbose logging
+bunx instantcode --verbose
+
+# Enable mock mode
+bunx instantcode --mock
 ```
+
+#### CLI Options
+
+- `-p, --port <number>` - Port to run server on (default: 7318)
+- `-l, --listen <address>` - Address to bind server to (default: localhost)
+- `-a, --public-address <url>` - Public URL for reverse proxy scenarios
+- `-V, --verbose` - Enable verbose logging
+- `-m, --mock` - Enable mock mode (skip Claude Code)
+- `-h, --help` - Show help message
+- `-v, --version` - Show version
 
 ### Add Script Manually
 
 Add to your HTML:
 
 ```html
+<!-- Default setup -->
 <script src="http://localhost:7318/inspector-toolbar.js"></script>
+
+<!-- With custom port -->
+<script src="http://localhost:8080/inspector-toolbar.js"></script>
+
+<!-- With reverse proxy -->
+<script src="https://ai.yourdomain.com/inspector-toolbar.js"></script>
 ```
 
 ## Troubleshooting
@@ -140,11 +195,32 @@ Add to your HTML:
 3. Select the exact element you're asking about
 4. Try rephrasing your question
 
-### Port 7318 Already In Use?
+### Port Already In Use?
 The server automatically checks port availability. If you see this error:
-1. Stop any existing InstantCode servers
-2. Check what's using port 7318: `lsof -i :7318`
-3. Kill the process or restart your machine
+1. Use a different port: `bunx instantcode --port 8080`
+2. Stop any existing InstantCode servers
+3. Check what's using the port: `lsof -i :7318`
+4. Kill the process or restart your machine
+
+### Using with Reverse Proxy?
+For production deployments behind nginx, Apache, or cloud load balancers:
+
+```bash
+# Server listens locally, toolbar uses public URL
+bunx instantcode --listen localhost --public-address https://ai.yourdomain.com
+```
+
+Example nginx config:
+```nginx
+location /instantcode/ {
+    proxy_pass http://localhost:7318/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection 'upgrade';
+    proxy_set_header Host $host;
+    proxy_cache_bypass $http_upgrade;
+}
+```
 
 ---
 
