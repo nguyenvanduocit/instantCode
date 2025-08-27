@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.10.1](https://github.com/nguyenvanduocit/instantCode/compare/v1.10.0...v1.10.1) (2025-08-27)
+
+
+### Bug Fixes
+
+* **server:** simplify public address handling ([37e7581](https://github.com/nguyenvanduocit/instantCode/commit/37e75813334fd2d57cf26cd3a037e38166c2b28d))
+
 ## [1.10.0](https://github.com/nguyenvanduocit/instantCode/compare/v1.9.2...v1.10.0) (2025-08-27)
 
 
