@@ -115,7 +115,7 @@ if (publicAddressFlag !== -1 && args[publicAddressFlag + 1]) {
 
 // Default public address if not specified
 if (!publicAddress) {
-  publicAddress = `http://${listenAddress === '0.0.0.0' ? 'localhost' : listenAddress}:${port}`
+  publicAddress = `http://${listenAddress}:${port}`
 }
 
 function checkClaudeCodeInstallation(): boolean {

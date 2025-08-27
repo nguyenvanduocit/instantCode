@@ -45,7 +45,7 @@ class InspectorServerManager {
     this.options = {
       port,
       listenAddress,
-      publicAddress: options.publicAddress ?? `http://${listenAddress === '0.0.0.0' ? 'localhost' : listenAddress}:${port}`,
+      publicAddress: options.publicAddress ?? `http://${listenAddress}:${port}`,
       verbose: options.verbose ?? false,
       mock: options.mock ?? false,
     };
@@ -111,7 +111,7 @@ class InspectorServerManager {
     // Add CLI arguments
     args.push('--port', String(this.options.port));
     args.push('--listen', this.options.listenAddress);
-    if (this.options.publicAddress !== `http://${this.options.listenAddress === '0.0.0.0' ? 'localhost' : this.options.listenAddress}:${this.options.port}`) {
+    if (this.options.publicAddress ?? `http://${this.options.listenAddress}:${this.options.port}`) {
       args.push('--public-address', this.options.publicAddress);
     }
     if (this.options.verbose) {
