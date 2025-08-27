@@ -1,6 +1,6 @@
 {
   "name": "instantcode",
-  "version": "1.10.0",
+  "version": "1.10.1",
   "description": "AI-powered web inspection tool - Pick elements and get instant AI assistance",
   "type": "module",
   "main": "dist/index.cjs",
