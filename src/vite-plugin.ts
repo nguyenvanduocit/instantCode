@@ -103,7 +103,7 @@ class InspectorServerManager {
         }
       } else {
         // Use node for compiled CJS in production
-        cmd = 'node';
+        cmd = 'bun';
         args = [serverFile];
       }
     }
