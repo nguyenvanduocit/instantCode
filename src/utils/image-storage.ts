@@ -16,7 +16,7 @@ export type StorageResult<T, E = ImageStorageError> =
   | { success: true; data: T }
   | { success: false; error: E }
 
-const logger = createLogger('image-storage')
+const logger = createLogger(false)
 
 /**
  * Get the tmp directory path for inspector captures
