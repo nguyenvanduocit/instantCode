@@ -18,7 +18,7 @@ export interface ScreenshotCaptureService {
   generateImageFilename(element: Element): string
 }
 
-const logger = createLogger('capture')
+const logger = createLogger(false)
 
 /**
  * Convert DOM element to canvas for screenshot capture
