@@ -261,22 +261,3 @@ interface SendMessageWithImages extends SendMessage {
 
 **Client-Side Logging**: Screenshot capture success/failure rates, timing metrics  
 **Server-Side Logging**: Image save operations, tmp directory usage, cleanup events
-
-## Testing Strategy
-
-### Unit Tests
-- Screenshot capture module with mocked browser APIs
-- Image filename generation with collision handling
-- tRPC image save procedure with file system mocks
-- SendMessage schema validation with image paths
-
-### Integration Tests  
-- End-to-end element selection to image capture flow
-- tRPC client-server image upload communication
-- AI message formatting with image path inclusion
-- File system operations in tmp directory
-
-### E2E Tests
-- Complete user workflow from element selection to AI response
-- Multiple element selection with multiple image captures
-- Error scenarios with fallback to text-only mode
