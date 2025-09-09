@@ -66,24 +66,24 @@
   - Provide fallback to text-only AI interaction
   - _Requirements: 1.1, 2.1_
 
-- [ ] 4. Test and validate image capture functionality
-- [ ] 4.1 Test element screenshot capture in different scenarios
-  - Verify screenshot capture works for various element types
-  - Test with elements at different viewport positions
-  - Validate unique filename generation prevents conflicts
-  - Check graceful handling of capture failures
+- [ ] 4. Validate image capture functionality through code review
+- [ ] 4.1 Review element screenshot capture implementation
+  - Examine screenshot capture code for different element types handling
+  - Verify element bounds calculation and viewport handling logic
+  - Review unique filename generation and collision detection
+  - Check error handling and graceful failure patterns
   - _Requirements: 1.1, 1.3, 3.1_
 
-- [ ] 4.2 Test server-side image storage and retrieval
-  - Verify tmp directory creation and file storage
-  - Test file path generation and uniqueness
-  - Validate proper error handling for storage failures
-  - Check image file integrity after storage
+- [ ] 4.2 Review server-side image storage implementation
+  - Examine tmp directory creation and file storage logic
+  - Verify file path generation and uniqueness mechanisms
+  - Review error handling for storage failures and edge cases
+  - Check atomic file operations and data integrity measures
   - _Requirements: 1.2, 3.2_
 
-- [ ] 4.3 Test end-to-end AI message flow with images
-  - Verify complete workflow from element selection to AI message
-  - Test multiple element selection with multiple image paths
-  - Validate AI prompt includes proper image path references
+- [ ] 4.3 Review end-to-end AI message integration
+  - Examine complete workflow from element selection to AI message
+  - Verify multiple element selection and image path handling
+  - Review AI prompt formatting with image path references
   - Check backward compatibility with existing AI workflow
   - _Requirements: 2.1, 2.2, 2.3_

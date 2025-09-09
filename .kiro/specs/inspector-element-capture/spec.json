@@ -3,7 +3,7 @@
   "created_at": "2025-09-09T00:00:00Z",
   "updated_at": "2025-09-09T11:56:00Z",
   "language": "en",
-  "phase": "design-generated",
+  "phase": "tasks-generated",
   "approvals": {
     "requirements": {
       "generated": true,
@@ -14,7 +14,7 @@
       "approved": true
     },
     "tasks": {
-      "generated": false,
+      "generated": true,
       "approved": false
     }
   },
