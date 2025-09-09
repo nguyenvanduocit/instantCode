@@ -195,16 +195,49 @@ async function canvasToBlob(canvas: HTMLCanvasElement): Promise<CaptureResult<Bl
 }
 
 /**
- * Generate unique filename for captured element image
+ * Generate unique descriptive filename for captured element image
+ * Format: element-{timestamp}-{tagName}-{elementHash}-{index}.png
  */
 function generateImageFilename(element: Element): string {
-  const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const timestamp = new Date().toISOString().replace(/[:.T]/g, '').replace(/Z$/, '').substring(0, 14)
   const tagName = element.tagName.toLowerCase()
   
-  // Generate element hash from xpath and selector
+  // Generate descriptive element identifier
+  let descriptor = tagName
+  
+  // Add ID if available (most descriptive)
+  if (element.id) {
+    descriptor = `${element.id}-${tagName}`
+  } else if (element.className && typeof element.className === 'string') {
+    // Add class names (filter out inspector classes)
+    const classes = element.className
+      .split(/\s+/)
+      .filter(cls => cls && !cls.startsWith('inspector-'))
+      .slice(0, 2) // Limit to first 2 classes
+      .join('-')
+    
+    if (classes) {
+      descriptor = `${tagName}-${classes}`
+    }
+  }
+  
+  // Add text content hint if element has short text
+  const textContent = element.textContent?.trim()
+  if (textContent && textContent.length > 0 && textContent.length <= 20) {
+    const textHint = textContent
+      .replace(/[^a-zA-Z0-9]/g, '')
+      .toLowerCase()
+      .substring(0, 8)
+    
+    if (textHint) {
+      descriptor = `${descriptor}-${textHint}`
+    }
+  }
+  
+  // Generate element hash for uniqueness
   const xpath = generateSimpleXPath(element)
   const cssSelector = generateSimpleCSSSelector(element)
-  const elementString = `${xpath}-${cssSelector}`
+  const elementString = `${xpath}-${cssSelector}-${descriptor}`
   
   // Simple hash function for element identifier
   let hash = 0
@@ -216,7 +249,10 @@ function generateImageFilename(element: Element): string {
   
   const elementHash = Math.abs(hash).toString(36).substring(0, 6)
   
-  return `element-${timestamp}-${tagName}-${elementHash}.png`
+  // Add collision detection index (will be incremented by server if needed)
+  const index = 1
+  
+  return `element-${timestamp}-${descriptor}-${elementHash}-${index}.png`
 }
 
 /**
