@@ -6,12 +6,14 @@ import type { Context } from './context'
 import {
   ElementDataSchema,
   SendMessageSchema,
+  SaveImageRequestSchema,
   type ElementData,
   type PageInfo,
-  type SendMessageResponse
+  type SendMessageResponse,
+  type SaveImageResponse
 } from '../shared/schemas'
 import { sampleSendMessageResponses } from '../sample'
-import { saveElementImage, type SaveImageRequest } from '../utils/image-storage'
+import { saveElementImage } from '../utils/image-storage'
 
 const t = initTRPC.context<Context>().create({
   transformer: superjson,
@@ -183,6 +185,31 @@ export const appRouter = router({
         componentLocations,
         elementsCount: input.elements.length,
         prompt: input.prompt,
+      }
+    }),
+
+  saveElementImage: publicProcedure
+    .input(SaveImageRequestSchema)
+    .mutation(async ({ input, ctx }) => {
+      ctx.logger.log('Saving element image:', {
+        filename: input.filename,
+        elementInfo: input.elementInfo,
+        dataSize: input.imageData.length
+      })
+
+      try {
+        const result = await saveElementImage(input, ctx.cwd)
+        
+        if (result.success) {
+          ctx.logger.log('Image saved successfully:', result.data)
+          return result.data as SaveImageResponse
+        } else {
+          ctx.logger.error('Image save failed:', result.error)
+          throw new Error(`Image save failed: ${result.error.message}`)
+        }
+      } catch (error) {
+        ctx.logger.error('Image save error:', error)
+        throw new Error(`Image save error: ${error instanceof Error ? error.message : 'Unknown error'}`)
       }
     }),
 })

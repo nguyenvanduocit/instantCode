@@ -9,6 +9,7 @@ export const ElementDataSchema = z.object({
   textContent: z.string(),
   attributes: z.record(z.string(), z.string()),
   children: z.array(z.any()),
+  imagePath: z.string().optional(), // Optional path to captured screenshot
   componentData: z.object({
     componentLocation: z.string(),
     componentName: z.string().optional(),
@@ -49,6 +50,7 @@ export const SendMessageSchema = z.object({
   consoleErrors: z.array(z.string()).optional(),
   consoleWarnings: z.array(z.string()).optional(),
   consoleInfo: z.array(z.string()).optional(),
+  imagePaths: z.array(z.string()).optional(), // Array of captured image file paths
 })
 
 

@@ -19,5 +19,8 @@ export type {
   ElementData,
   PageInfo,
   SendMessage,
-  SendMessageResponse
+  SendMessageResponse,
+  ElementIdentifier,
+  SaveImageRequest,
+  SaveImageResponse
 } from './schemas'

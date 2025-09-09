@@ -256,6 +256,7 @@ export function createElementSelectionManager(): ElementSelectionManager {
             return acc
           }, {} as Record<string, string>),
           children: [],
+          imagePath: data.imagePath, // Include captured image path
         }
 
         if (componentData) {

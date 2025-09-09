@@ -22,22 +22,22 @@
   - Add graceful fallback when screenshot capture fails
   - _Requirements: 1.1_
 
-- [ ] 2. Build server-side image storage functionality
-- [ ] 2.1 Create image file storage utilities
+- [x] 2. Build server-side image storage functionality
+- [x] 2.1 Create image file storage utilities
   - Build function to save base64 image data to tmp directory
   - Create tmp directory structure under project root (tmp/inspector-captures/)
   - Implement atomic file write operations to prevent corruption
   - Add file existence checks to prevent overwrites
   - _Requirements: 1.2, 3.2_
 
-- [ ] 2.2 Add image storage endpoint to tRPC router
+- [x] 2.2 Add image storage endpoint to tRPC router
   - Create saveElementImage procedure in existing tRPC router
   - Accept base64 image data and element metadata
   - Return saved file path and success status
   - Include proper error handling for file system operations
   - _Requirements: 1.2, 3.2_
 
-- [ ] 2.3 Extend data schemas for image path support
+- [x] 2.3 Extend data schemas for image path support
   - Add optional imagePath field to ElementData schema
   - Extend SendMessage schema to include array of image paths
   - Update type definitions to support image metadata

@@ -1,0 +1,1 @@
+là user, tôi muốn có một trang để hiển thị các lời nhắn,lời cảm ơn, và cũng có một modal để bất kỳ ai cũng có thể submit các lời cảm hơn này (@

@@ -5,6 +5,7 @@
 import { promises as fs } from 'node:fs'
 import { join, dirname } from 'node:path'
 import { createLogger } from './logger'
+import type { SaveImageRequest, SaveImageResponse, ElementIdentifier } from '../shared/types'
 
 export interface ImageStorageError {
   type: 'FILE_SYSTEM_ERROR' | 'INVALID_DATA' | 'STORAGE_FULL' | 'PERMISSION_ERROR'
@@ -14,24 +15,6 @@ export interface ImageStorageError {
 export type StorageResult<T, E = ImageStorageError> = 
   | { success: true; data: T }
   | { success: false; error: E }
-
-export interface SaveImageRequest {
-  imageData: string // base64 encoded
-  filename: string
-  elementInfo: ElementIdentifier
-}
-
-export interface SaveImageResponse {
-  success: boolean
-  imagePath: string
-  filename: string
-}
-
-export interface ElementIdentifier {
-  xpath: string
-  cssSelector: string
-  tagName: string
-}
 
 const logger = createLogger('image-storage')
 

@@ -15,7 +15,8 @@ import type {
   ElementData, 
   PageInfo, 
   SendMessageInput,
-  SendMessageResponse
+  SendMessageResponse,
+  SaveImageRequest
 } from '../shared/types'
 import { 
   initializeConsoleErrorCapture, 
@@ -24,6 +25,7 @@ import {
   captureConsoleInfo 
 } from './console'
 import { createLogger } from './logger'
+import { createScreenshotCaptureService } from './capture'
 
 export interface AIMessageHandler {
   onData: (data: SendMessageResponse) => void
