@@ -3,10 +3,10 @@
   "created_at": "2025-09-09T00:00:00Z",
   "updated_at": "2025-09-09T00:00:00Z",
   "language": "en",
-  "phase": "initialized",
+  "phase": "requirements-generated",
   "approvals": {
     "requirements": {
-      "generated": false,
+      "generated": true,
       "approved": false
     },
     "design": {
