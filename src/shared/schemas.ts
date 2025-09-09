@@ -52,6 +52,25 @@ export const SendMessageSchema = z.object({
 })
 
 
+// Image storage schemas
+export const ElementIdentifierSchema = z.object({
+  xpath: z.string(),
+  cssSelector: z.string(),
+  tagName: z.string(),
+})
+
+export const SaveImageRequestSchema = z.object({
+  imageData: z.string(), // base64 encoded
+  filename: z.string(),
+  elementInfo: ElementIdentifierSchema,
+})
+
+export const SaveImageResponseSchema = z.object({
+  success: z.boolean(),
+  imagePath: z.string(),
+  filename: z.string(),
+})
+
 export const SendMessageResponseSchema = z.union([
 
 // 'system' message type
@@ -145,3 +164,6 @@ export type ElementData = z.infer<typeof ElementDataSchema>
 export type PageInfo = z.infer<typeof PageInfoSchema>
 export type SendMessage = z.infer<typeof SendMessageSchema>
 export type SendMessageResponse = z.infer<typeof SendMessageResponseSchema>
+export type ElementIdentifier = z.infer<typeof ElementIdentifierSchema>
+export type SaveImageRequest = z.infer<typeof SaveImageRequestSchema>
+export type SaveImageResponse = z.infer<typeof SaveImageResponseSchema>

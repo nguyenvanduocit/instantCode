@@ -4,12 +4,14 @@
 
 import type { ElementData } from '../shared/types'
 import { XPathUtils } from '../utils/xpath'
+import { createScreenshotCaptureService, type ScreenshotCaptureService } from './capture'
 
 export interface SelectedElementInfo {
   color: string
   originalOutline: string
   originalOutlineOffset: string
   index: number
+  imagePath?: string // Optional path to captured screenshot
 }
 
 export interface ElementSelectionManager {
@@ -22,11 +24,14 @@ export interface ElementSelectionManager {
   findSelectedParent(element: Element): Element | null
   findSelectedChildren(element: Element): Element[]
   buildHierarchicalStructure(componentFinder?: (el: Element) => any): ElementData[]
+  captureSelectedElementsScreenshots(): Promise<void>
+  getElementImagePaths(): string[]
 }
 
 export function createElementSelectionManager(): ElementSelectionManager {
   const selectedElements = new Map<Element, SelectedElementInfo>()
   const badges = new Map<Element, HTMLElement>()
+  const screenshotService = createScreenshotCaptureService()
   let colorIndex = 0
   const colors = [
     '#FF6B6B',
@@ -269,6 +274,48 @@ export function createElementSelectionManager(): ElementSelectionManager {
       }
 
       return rootElements.map(element => buildElementInfo(element))
+    },
+
+    async captureSelectedElementsScreenshots(): Promise<void> {
+      const promises: Promise<void>[] = []
+      
+      selectedElements.forEach(async (elementInfo, element) => {
+        // Skip if already has image path
+        if (elementInfo.imagePath) {
+          return
+        }
+        
+        const capturePromise = (async () => {
+          try {
+            const result = await screenshotService.captureElementScreenshot(element)
+            if (result.success) {
+              // In a real implementation, this would upload to server
+              // For now, store the base64 data as imagePath
+              elementInfo.imagePath = result.data
+            } else {
+              console.warn('Failed to capture element screenshot:', result.error)
+            }
+          } catch (error) {
+            console.warn('Element screenshot capture error:', error)
+          }
+        })()
+        
+        promises.push(capturePromise)
+      })
+      
+      await Promise.all(promises)
+    },
+
+    getElementImagePaths(): string[] {
+      const imagePaths: string[] = []
+      
+      selectedElements.forEach((elementInfo) => {
+        if (elementInfo.imagePath) {
+          imagePaths.push(elementInfo.imagePath)
+        }
+      })
+      
+      return imagePaths
     }
   }
 }

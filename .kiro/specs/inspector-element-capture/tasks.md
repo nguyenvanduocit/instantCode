@@ -1,21 +1,21 @@
 # Implementation Plan
 
-- [ ] 1. Create element screenshot capture functionality
-- [ ] 1.1 Build element-to-canvas conversion utility
+- [x] 1. Create element screenshot capture functionality
+- [x] 1.1 Build element-to-canvas conversion utility
   - Create pure function to convert DOM element to canvas
   - Implement element bounds calculation for precise capture  
   - Add canvas-to-blob conversion with PNG format
   - Handle edge cases for elements outside viewport
   - _Requirements: 1.1_
 
-- [ ] 1.2 Generate unique descriptive filenames for captured images
+- [x] 1.2 Generate unique descriptive filenames for captured images
   - Create filename generation function using timestamp and element identifiers
   - Include element tag name and CSS selector hash in filename
   - Ensure filename uniqueness with collision detection
   - Format filenames for easy AI understanding (element-timestamp-hash.png)
   - _Requirements: 1.3, 2.2, 3.1_
 
-- [ ] 1.3 Integrate screenshot capture with element selection workflow
+- [x] 1.3 Integrate screenshot capture with element selection workflow
   - Extend existing element selection to trigger automatic screenshot capture
   - Store captured image path with selected element data
   - Maintain backward compatibility with existing selection functionality

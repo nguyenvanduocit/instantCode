@@ -11,6 +11,7 @@ import {
   type SendMessageResponse
 } from '../shared/schemas'
 import { sampleSendMessageResponses } from '../sample'
+import { saveElementImage, type SaveImageRequest } from '../utils/image-storage'
 
 const t = initTRPC.context<Context>().create({
   transformer: superjson,
