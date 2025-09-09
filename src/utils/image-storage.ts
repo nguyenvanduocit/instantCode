@@ -3,9 +3,9 @@
  */
 
 import { promises as fs } from 'node:fs'
-import { join, dirname } from 'node:path'
+import { join } from 'node:path'
 import { createLogger } from './logger'
-import type { SaveImageRequest, SaveImageResponse, ElementIdentifier } from '../shared/types'
+import type { SaveImageRequest, SaveImageResponse } from '../shared/types'
 
 export interface ImageStorageError {
   type: 'FILE_SYSTEM_ERROR' | 'INVALID_DATA' | 'STORAGE_FULL' | 'PERMISSION_ERROR'

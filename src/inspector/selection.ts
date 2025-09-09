@@ -4,7 +4,7 @@
 
 import type { ElementData } from '../shared/types'
 import { XPathUtils } from '../utils/xpath'
-import { createScreenshotCaptureService, type ScreenshotCaptureService } from './capture'
+import { createScreenshotCaptureService } from './capture'
 
 export interface SelectedElementInfo {
   color: string
