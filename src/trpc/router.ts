@@ -198,7 +198,7 @@ export const appRouter = router({
       })
 
       try {
-        const result = await saveElementImage(input, ctx.cwd)
+        const result = await saveElementImage(input)
         
         if (result.success) {
           ctx.logger.log('Image saved successfully:', result.data)
