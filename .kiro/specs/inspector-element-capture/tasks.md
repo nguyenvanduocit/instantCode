@@ -44,22 +44,22 @@
   - Maintain backward compatibility with existing schemas
   - _Requirements: 2.1, 2.3_
 
-- [ ] 3. Integrate image capture with AI message flow
-- [ ] 3.1 Modify element selection to collect image paths
+- [x] 3. Integrate image capture with AI message flow
+- [x] 3.1 Modify element selection to collect image paths
   - Update selection manager to capture screenshots on element selection
   - Collect image paths from all selected elements  
   - Store image paths in element data for later retrieval
   - Handle multiple element selections with multiple images
   - _Requirements: 2.3_
 
-- [ ] 3.2 Include image paths in AI message formatting
+- [x] 3.2 Include image paths in AI message formatting
   - Extend AI message preparation to include captured image paths
   - Add image path references to AI prompt formatting
   - Ensure image paths are properly formatted for AI understanding
   - Maintain existing AI message functionality
   - _Requirements: 2.1, 2.3_
 
-- [ ] 3.3 Add error handling for image capture failures
+- [x] 3.3 Add error handling for image capture failures
   - Implement graceful degradation when browser doesn't support screenshots
   - Continue AI workflow even if image capture fails
   - Log capture failures for debugging without breaking user flow

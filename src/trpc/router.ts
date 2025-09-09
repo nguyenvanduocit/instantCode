@@ -44,7 +44,7 @@ export const appRouter = router({
 
       ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent connection message`)
 
-      const formattedPrompt = formatAIPrompt(input.userPrompt, input.selectedElements, input.pageInfo, input.consoleErrors)
+      const formattedPrompt = formatAIPrompt(input.userPrompt, input.selectedElements, input.pageInfo, input.consoleErrors, input.imagePaths)
 
       ctx.logger.log('Received structured input:', {
         userPrompt: input.userPrompt,
@@ -214,7 +214,7 @@ export const appRouter = router({
     }),
 })
 
-function formatAIPrompt(userPrompt: string, selectedElements: ElementData[], pageInfo: PageInfo, consoleErrors?: string[]): string {
+function formatAIPrompt(userPrompt: string, selectedElements: ElementData[], pageInfo: PageInfo, consoleErrors?: string[], imagePaths?: string[]): string {
   let formattedPrompt = `<userRequest>${userPrompt}</userRequest>`
 
   const replacer = (_key: string, value: any) => {
@@ -234,6 +234,10 @@ function formatAIPrompt(userPrompt: string, selectedElements: ElementData[], pag
 
   if (consoleErrors && consoleErrors.length > 0) {
     formattedPrompt += `<consoleErrors>${JSON.stringify(consoleErrors, replacer)}</consoleErrors>`
+  }
+
+  if (imagePaths && imagePaths.length > 0) {
+    formattedPrompt += `<elementImages>${JSON.stringify(imagePaths, replacer)}</elementImages>`
   }
 
   return formattedPrompt

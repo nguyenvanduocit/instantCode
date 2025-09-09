@@ -2,7 +2,6 @@
  * Screenshot Capture Service for element image capture
  */
 
-import type { ElementData } from '../shared/types'
 import { createLogger } from './logger'
 
 export interface CaptureError {
