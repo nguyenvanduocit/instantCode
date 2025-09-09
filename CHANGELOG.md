@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.11.0](https://github.com/nguyenvanduocit/instantCode/compare/v1.10.1...v1.11.0) (2025-09-09)
+
+
+### Features
+
+* **inspector:** add element screenshot capture for AI context ([35479e0](https://github.com/nguyenvanduocit/instantCode/commit/35479e0dbd6048786c481a5f812b03265697493f))
+* **inspector:** add element screenshot capture functionality ([11075ee](https://github.com/nguyenvanduocit/instantCode/commit/11075eecf189c3e16cbce2e85b62cd225655d33c))
+* **inspector:** add element screenshot capture functionality ([a7111fe](https://github.com/nguyenvanduocit/instantCode/commit/a7111fe572243381abd25bb931330c33447aa661))
+* **inspector:** add element screenshot capture functionality ([107272b](https://github.com/nguyenvanduocit/instantCode/commit/107272b4712ad0b1ba91155d2e793189ac93da2d))
+* **inspector:** enhance element screenshot filename generation ([ae08e2e](https://github.com/nguyenvanduocit/instantCode/commit/ae08e2e98a2dc3c00c14d41728985a944a36a388))
+* **kiro:** add inspector-element-capture spec structure ([01dee28](https://github.com/nguyenvanduocit/instantCode/commit/01dee28bdeaaafc49746540547022f0a3b60766c))
+* **kiro:** complete design phase for inspector-element-capture ([646e204](https://github.com/nguyenvanduocit/instantCode/commit/646e20430f70bb5631b50752bf141ccd7db0ca98))
+* **kiro:** complete design phase for inspector-element-capture ([54376eb](https://github.com/nguyenvanduocit/instantCode/commit/54376eb91ddfd1b9d58153a0855ec433bfc43769))
+* **kiro:** complete inspector-element-capture implementation ([863c670](https://github.com/nguyenvanduocit/instantCode/commit/863c670f045e29e1efa4b7c72c81a33d88044770))
+* **kiro:** complete tasks phase for inspector-element-capture ([6f43088](https://github.com/nguyenvanduocit/instantCode/commit/6f4308862cf01f2122cb6c6a0db6b3e0b4efa6c2))
+* **kiro:** generate requirements for inspector-element-capture ([abcb559](https://github.com/nguyenvanduocit/instantCode/commit/abcb5598cf0cef9e92519868d91119cca1e18431))
+* **kiro:** implement spec-driven development system ([e44deb6](https://github.com/nguyenvanduocit/instantCode/commit/e44deb6b14df906e2ebd7c3cc5a854e8f115b361))
+* **kiro:** initialize inspector-element-capture spec ([de8dfaa](https://github.com/nguyenvanduocit/instantCode/commit/de8dfaa51b76daf08b48434be3b166dd84a9038d))
+* **kiro:** initialize inspector-element-capture spec ([868080f](https://github.com/nguyenvanduocit/instantCode/commit/868080f1f187bf86b7d3b9e667f37f67887ff751))
+* **kiro:** update spec metadata for design completion ([a0eabb2](https://github.com/nguyenvanduocit/instantCode/commit/a0eabb257a47dbef2517dd6740e2bc6e61ffa939))
+* **kiro:** update spec metadata for design completion ([63d9607](https://github.com/nguyenvanduocit/instantCode/commit/63d96071fe220f79a7712df3c3e445cfa11dfa74))
+* **kiro:** update spec metadata for requirements completion ([a4a232f](https://github.com/nguyenvanduocit/instantCode/commit/a4a232f385de9adcd6d70219aed4cf611c97ecba))
+* **kiro:** update spec metadata for requirements completion ([62eb9cc](https://github.com/nguyenvanduocit/instantCode/commit/62eb9cc1fa289f8895bd8f0f58d5185743293fcf))
+* **kiro:** update spec metadata for task 4 validation changes ([19abf5a](https://github.com/nguyenvanduocit/instantCode/commit/19abf5a380438ae2a23e82bc156a28b94097cfd9))
+
+
+### Bug Fixes
+
+* **inspector:** correct logger initialization in capture service ([dfa9275](https://github.com/nguyenvanduocit/instantCode/commit/dfa9275b2ea3ca4bf0d8009cdf50fe07e61ab941))
+* **inspector:** correct logger initialization in image storage ([785c53c](https://github.com/nguyenvanduocit/instantCode/commit/785c53c28f7b1a4827ce40d6e7570929fc352279))
+* **inspector:** remove unused imports to fix TypeScript errors ([7db3bc8](https://github.com/nguyenvanduocit/instantCode/commit/7db3bc8900b499d49efc8d92b679d0a68b92d757))
+
 ## [1.10.1](https://github.com/nguyenvanduocit/instantCode/compare/v1.10.0...v1.10.1) (2025-08-27)
 
 
