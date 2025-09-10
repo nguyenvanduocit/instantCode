@@ -764,6 +764,7 @@ export class InspectorToolbar extends LitElement {
                 style: {
                   transform: 'scale(1)',
                   transformOrigin: 'top left',
+                  outline: "none"
                 }
               })
               
