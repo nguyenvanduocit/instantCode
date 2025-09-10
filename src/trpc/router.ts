@@ -187,7 +187,7 @@ export const appRouter = router({
 })
 
 function formatAIPrompt(userPrompt: string, selectedElements: ElementData[], pageInfo: PageInfo, consoleErrors?: string[]): string {
-  let formattedPrompt = `<userRequest>${userPrompt}</userRequest>`
+  let formattedPrompt = `<task>${userPrompt}</task>`
 
   const replacer = (_key: string, value: any) => {
     if (value === '' || (Array.isArray(value) && value.length === 0) || value === null) {
