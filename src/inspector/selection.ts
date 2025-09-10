@@ -253,6 +253,11 @@ export function createElementSelectionManager(): ElementSelectionManager {
           children: [],
         }
 
+        // Add image path if available
+        if (imagePaths && imagePaths.has(element)) {
+          elementInfo.imagePath = imagePaths.get(element)
+        }
+
         if (componentData) {
           elementInfo.componentData = componentData
         }
