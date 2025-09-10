@@ -756,7 +756,9 @@ export class InspectorToolbar extends LitElement {
         if (selectedElements.length > 0) {
           const screenshotPromises = selectedElements.map(async (element, index) => {
             try {
-              const dataUrl = await htmlToImage.toPng(element, {
+              // Cast to HTMLElement to satisfy TypeScript
+              const htmlElement = element as HTMLElement
+              const dataUrl = await htmlToImage.toPng(htmlElement, {
                 quality: 0.8,
                 pixelRatio: 1,
                 style: {
@@ -765,8 +767,9 @@ export class InspectorToolbar extends LitElement {
                 }
               })
               
-              // Upload the screenshot
-              const fileName = `element-${index + 1}-${Date.now()}.png`
+              // Create filename with index and tag name
+              const tagName = element.tagName.toLowerCase()
+              const fileName = `element__index-${index + 1}__tag-${tagName}.png`
               const uploadResponse = await fetch(`${this.aiEndpoint}/upload-image`, {
                 method: 'POST',
                 headers: {
