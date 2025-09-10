@@ -258,6 +258,25 @@ export function createElementSelectionManager(): ElementSelectionManager {
           elementInfo.imagePath = imagePaths.get(element)
         }
 
+        // Add computed styles
+        try {
+          const htmlElement = element as HTMLElement
+          const computedStyle = window.getComputedStyle(htmlElement)
+          elementInfo.computedStyles = {
+            width: htmlElement.offsetWidth,
+            height: htmlElement.offsetHeight,
+            fontSize: computedStyle.fontSize,
+            fontFamily: computedStyle.fontFamily,
+            color: computedStyle.color || undefined,
+            backgroundColor: computedStyle.backgroundColor || undefined,
+            display: computedStyle.display || undefined,
+            position: computedStyle.position || undefined,
+          }
+        } catch (error) {
+          // Skip computed styles if there's an error getting them
+          console.warn('Failed to get computed styles for element:', error)
+        }
+
         if (componentData) {
           elementInfo.componentData = componentData
         }
