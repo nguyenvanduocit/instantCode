@@ -889,34 +889,35 @@ export class InspectorToolbar extends LitElement {
   }
 
   private preventNavigation(): void {
-    // Modern Navigation API approach
+    // Modern Navigation API approach - but still use beforeunload for blocking
+    // Navigation API is more for SPA routing than blocking navigation
     if ('navigation' in window && 'addEventListener' in (window as any).navigation) {
       this.navigationAbortController = new AbortController()
       
       const handleNavigate = (event: any) => {
-        if (event.canIntercept && !event.hashChange && !event.downloadRequest) {
-          event.intercept({
-            handler: () => {
-              return new Promise((resolve, reject) => {
-                const proceed = confirm('Processing in progress. Are you sure you want to leave?')
-                if (proceed) {
-                  this.allowNavigation()
-                  resolve(undefined)
-                } else {
-                  reject(new Error('Navigation cancelled by user'))
-                }
-              })
-            }
-          })
+        // For external navigation or full page reloads, we still want to warn
+        if (!event.hashChange && !event.downloadRequest) {
+          // Check if user really wants to leave during processing
+          const proceed = confirm('Processing in progress. Are you sure you want to leave?')
+          if (!proceed) {
+            // Prevent the navigation
+            event.preventDefault()
+            return
+          }
         }
       }
       
       ;(window as any).navigation.addEventListener('navigate', handleNavigate, {
         signal: this.navigationAbortController.signal
       })
-    } else {
-      // Fallback to traditional beforeunload
-      window.onbeforeunload = () => 'Processing in progress. Are you sure you want to leave?'
+    }
+    
+    // Always set beforeunload as primary protection for page refreshes/closes
+    window.onbeforeunload = (event) => {
+      const message = 'Processing in progress. Are you sure you want to leave?'
+      event.preventDefault()
+      event.returnValue = message
+      return message
     }
   }
 
