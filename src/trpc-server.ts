@@ -57,7 +57,8 @@ document.body.prepend(toolbar);
       const { base64, fileName } = req.body
 
       if (!base64 || !fileName) {
-        return res.status(400).json({ error: 'Missing base64 data or fileName' })
+        res.status(400).json({ error: 'Missing base64 data or fileName' })
+        return
       }
 
       // Create .instantcode directory if it doesn't exist
