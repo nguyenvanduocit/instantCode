@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.13.0](https://github.com/nguyenvanduocit/instantCode/compare/v1.12.0...v1.13.0) (2025-09-10)
+
+
+### Features
+
+* **inspector:** upgrade to modern Navigation API for navigation prevention ([3121230](https://github.com/nguyenvanduocit/instantCode/commit/312123068f85589e84beec2016c96fcf2bed78f5))
+* **inspector:** upgrade to modern Navigation API for navigation prevention ([2c4e1c9](https://github.com/nguyenvanduocit/instantCode/commit/2c4e1c9d4ce4aadc197fe4c0b6c60d820675248a))
+* **inspector:** upgrade to modern Navigation API for navigation prevention ([6888458](https://github.com/nguyenvanduocit/instantCode/commit/68884586c3cc42447bdbe892bcd598f9a144cd3c))
+
 ## [1.12.0](https://github.com/nguyenvanduocit/instantCode/compare/v1.11.0...v1.12.0) (2025-09-10)
 
 
