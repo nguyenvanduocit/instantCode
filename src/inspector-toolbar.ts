@@ -9,6 +9,7 @@ import { classMap } from 'lit/directives/class-map.js'
 import { createRef, ref, type Ref } from 'lit/directives/ref.js'
 
 import * as yaml from 'js-yaml'
+import * as htmlToImage from 'html-to-image'
 
 import type { ElementData, PageInfo, SendMessageResponse } from './shared/types'
 import { createAIManager, type AIManager, type AIMessageHandler } from './inspector/ai'
@@ -747,6 +748,65 @@ export class InspectorToolbar extends LitElement {
 
       this.setProcessingState(true)
 
+      // Capture screenshots of selected elements before sending to AI
+      let screenshotPromptAddition = ''
+      try {
+        const selectedElements = Array.from(this.selectionManager.getSelectedElements().keys())
+        
+        if (selectedElements.length > 0) {
+          const screenshotPromises = selectedElements.map(async (element, index) => {
+            try {
+              const dataUrl = await htmlToImage.toPng(element, {
+                quality: 0.8,
+                pixelRatio: 1,
+                style: {
+                  transform: 'scale(1)',
+                  transformOrigin: 'top left',
+                }
+              })
+              
+              // Upload the screenshot
+              const fileName = `element-${index + 1}-${Date.now()}.png`
+              const uploadResponse = await fetch(`${this.aiEndpoint}/upload-image`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  base64: dataUrl,
+                  fileName: fileName
+                })
+              })
+
+              if (uploadResponse.ok) {
+                const result = await uploadResponse.json()
+                this.logger.log(`Screenshot of element ${index + 1} captured and uploaded:`, result.filePath)
+                return fileName
+              } else {
+                this.logger.warn(`Failed to upload screenshot for element ${index + 1}`)
+                return null
+              }
+            } catch (elementError) {
+              this.logger.warn(`Failed to capture screenshot for element ${index + 1}:`, elementError)
+              return null
+            }
+          })
+
+          const uploadedFiles = await Promise.all(screenshotPromises)
+          const successfulUploads = uploadedFiles.filter(fileName => fileName !== null)
+          
+          if (successfulUploads.length > 0) {
+            const fileList = successfulUploads.join(', ')
+            screenshotPromptAddition = `\n\n[NOTE: I have captured screenshots of the selected elements and saved them as ${fileList} in the .instantcode/ folder. Please refer to these images when analyzing the UI/UX or visual elements.]`
+          }
+        } else {
+          this.logger.log('No elements selected, skipping screenshot capture')
+        }
+      } catch (screenshotError) {
+        this.logger.warn('Failed to capture screenshots:', screenshotError)
+        // Continue without screenshots - don't fail the entire request
+      }
+
       const messageHandler: AIMessageHandler = {
         onData: (data: SendMessageResponse) => {
           console.log(JSON.stringify(data))
@@ -785,7 +845,7 @@ export class InspectorToolbar extends LitElement {
       }
 
       await this.aiManager.sendMessage(
-        prompt,
+        prompt + screenshotPromptAddition,
         selectedElements,
         pageInfo,
         this.cwd,
