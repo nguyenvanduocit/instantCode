@@ -916,9 +916,6 @@ export class InspectorToolbar extends LitElement {
       this.navigationAbortController.abort()
       this.navigationAbortController = null
     }
-    
-    // Clean up traditional beforeunload
-    window.onbeforeunload = null
   }
 
   // Lifecycle methods
