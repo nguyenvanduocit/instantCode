@@ -201,7 +201,26 @@ function formatAIPrompt(userPrompt: string, selectedElements: ElementData[], pag
   }
 
   if (selectedElements && selectedElements.length > 0) {
+    // Extract image paths for special handling
+    const imagePaths: string[] = []
+    const extractImagePaths = (elements: ElementData[]) => {
+      elements.forEach(element => {
+        if (element.imagePath) {
+          imagePaths.push(element.imagePath)
+        }
+        if (element.children && Array.isArray(element.children)) {
+          extractImagePaths(element.children)
+        }
+      })
+    }
+    extractImagePaths(selectedElements)
+
     formattedPrompt += `<selection>${JSON.stringify(selectedElements, replacer)}</selection>`
+    
+    // Add image paths for Claude to reference
+    if (imagePaths.length > 0) {
+      formattedPrompt += `\n\nI have attached ${imagePaths.length} screenshot${imagePaths.length > 1 ? 's' : ''} of the selected elements. Please refer to these images when analyzing the UI/UX or visual elements:\n${imagePaths.map(path => `- ${path}`).join('\n')}`
+    }
   }
 
   if (consoleErrors && consoleErrors.length > 0) {
