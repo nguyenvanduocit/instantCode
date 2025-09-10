@@ -59,6 +59,7 @@
     "@types/js-yaml": "^4.0.9",
     "cors": "^2.8.5",
     "express": "^5.1.0",
+    "html-to-image": "^1.11.13",
     "js-yaml": "^4.1.0",
     "lit": "^3.3.1",
     "optimal-select": "^4.0.1",
