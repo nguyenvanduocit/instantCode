@@ -715,8 +715,76 @@ export class InspectorToolbar extends LitElement {
     }
 
     const pageInfo = this.getCurrentPageInfo()
+    
+    // Capture screenshots first to get image paths for elements
+    let imagePaths: Map<Element, string> | undefined
+    try {
+      const selectedElementsArray = Array.from(this.selectionManager.getSelectedElements().keys())
+      
+      if (selectedElementsArray.length > 0 && this.aiEndpoint) {
+        imagePaths = new Map()
+        
+        const screenshotPromises = selectedElementsArray.map(async (element, index) => {
+          try {
+            // Cast to HTMLElement to satisfy TypeScript
+            const htmlElement = element as HTMLElement
+            const dataUrl = await htmlToImage.toPng(htmlElement, {
+              quality: 0.8,
+              pixelRatio: 1,
+              style: {
+                transform: 'scale(1)',
+                transformOrigin: 'top left',
+                outline: "none"
+              }
+            })
+            
+            // Create filename with index and tag name
+            const tagName = element.tagName.toLowerCase()
+            const fileName = `element__index-${index + 1}__tag-${tagName}.png`
+            // Create full path by combining cwd with .instantcode directory and filename
+            const fullPath = `${this.cwd}/.instantcode/${fileName}`
+            const uploadResponse = await fetch(`${this.aiEndpoint}/upload-image`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                base64: dataUrl,
+                filePath: fullPath
+              })
+            })
+
+            if (uploadResponse.ok) {
+              const result = await uploadResponse.json()
+              this.logger.log(`Screenshot of element ${index + 1} captured and uploaded:`, result.filePath)
+              return { element, filePath: result.filePath }
+            } else {
+              this.logger.warn(`Failed to upload screenshot for element ${index + 1}`)
+              return null
+            }
+          } catch (elementError) {
+            this.logger.warn(`Failed to capture screenshot for element ${index + 1}:`, elementError)
+            return null
+          }
+        })
+
+        const uploadResults = await Promise.all(screenshotPromises)
+        uploadResults.forEach(result => {
+          if (result && imagePaths) {
+            imagePaths.set(result.element, result.filePath)
+          }
+        })
+        
+        this.logger.log('Screenshot capture completed', { totalElements: selectedElementsArray.length, successfulCaptures: imagePaths.size })
+      }
+    } catch (screenshotError) {
+      this.logger.warn('Failed to capture screenshots:', screenshotError)
+      // Continue without screenshots - don't fail the entire request
+    }
+    
     const selectedElementsHierarchy = this.selectionManager.buildHierarchicalStructure(
-      (el) => findNearestComponent(el, this.verbose)
+      (el) => findNearestComponent(el, this.verbose),
+      imagePaths
     )
 
     if (this.aiEndpoint) {
