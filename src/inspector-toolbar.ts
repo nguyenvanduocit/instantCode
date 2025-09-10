@@ -872,18 +872,63 @@ export class InspectorToolbar extends LitElement {
     }
   }
 
+  private navigationAbortController: AbortController | null = null
+
   private setProcessingState(isProcessing: boolean): void {
     if (isProcessing) {
       this.startProcessing()
       this.showInitiatingIndicator = true
       this.showProcessingMessage = true
-      window.onbeforeunload = () => 'Processing in progress. Are you sure you want to leave?'
+      this.preventNavigation()
     } else {
       this.endProcessing()
       this.showInitiatingIndicator = false
       this.showProcessingMessage = false
-      window.onbeforeunload = null
+      this.allowNavigation()
     }
+  }
+
+  private preventNavigation(): void {
+    // Modern Navigation API approach
+    if ('navigation' in window && 'addEventListener' in (window as any).navigation) {
+      this.navigationAbortController = new AbortController()
+      
+      const handleNavigate = (event: any) => {
+        if (event.canIntercept && !event.hashChange && !event.downloadRequest) {
+          event.intercept({
+            handler: () => {
+              return new Promise((resolve, reject) => {
+                const proceed = confirm('Processing in progress. Are you sure you want to leave?')
+                if (proceed) {
+                  this.allowNavigation()
+                  resolve(undefined)
+                } else {
+                  reject(new Error('Navigation cancelled by user'))
+                }
+              })
+            }
+          })
+        }
+      }
+      
+      ;(window as any).navigation.addEventListener('navigate', handleNavigate, {
+        signal: this.navigationAbortController.signal
+      })
+    } else {
+      // Fallback to traditional beforeunload
+      window.onbeforeunload = () => 'Processing in progress. Are you sure you want to leave?'
+    }
+  }
+
+  private allowNavigation(): void {
+    // Clean up Navigation API listener
+    if (this.navigationAbortController) {
+      this.navigationAbortController.abort()
+      this.navigationAbortController = null
+    }
+    
+    // Clean up traditional beforeunload
+    window.onbeforeunload = null
   }
 
   // Lifecycle methods
@@ -903,7 +948,7 @@ export class InspectorToolbar extends LitElement {
   disconnectedCallback(): void {
     super.disconnectedCallback()
 
-    window.onbeforeunload = null
+    this.allowNavigation()
 
     this.aiManager.destroy()
     this.inspectionManager.destroy()
