@@ -872,49 +872,17 @@ export class InspectorToolbar extends LitElement {
     }
   }
 
-  private navigationAbortController: AbortController | null = null
-
   private setProcessingState(isProcessing: boolean): void {
     if (isProcessing) {
       this.startProcessing()
       this.showInitiatingIndicator = true
       this.showProcessingMessage = true
-      this.preventNavigation()
+      window.onbeforeunload = () => 'Processing in progress. Are you sure you want to leave?'
     } else {
       this.endProcessing()
       this.showInitiatingIndicator = false
       this.showProcessingMessage = false
-      this.allowNavigation()
-    }
-  }
-
-  private preventNavigation(): void {
-    // Use only Navigation API for preventing navigation
-    if ('navigation' in window && 'addEventListener' in (window as any).navigation) {
-      this.navigationAbortController = new AbortController()
-      
-      const handleNavigate = (event: any) => {
-        // Prevent all navigation during processing (except hash changes and downloads)
-        if (!event.hashChange && !event.downloadRequest) {
-          const proceed = confirm('Processing in progress. Are you sure you want to leave?')
-          if (!proceed) {
-            event.preventDefault()
-            return
-          }
-        }
-      }
-      
-      ;(window as any).navigation.addEventListener('navigate', handleNavigate, {
-        signal: this.navigationAbortController.signal
-      })
-    }
-  }
-
-  private allowNavigation(): void {
-    // Clean up Navigation API listener
-    if (this.navigationAbortController) {
-      this.navigationAbortController.abort()
-      this.navigationAbortController = null
+      window.onbeforeunload = null
     }
   }
 
@@ -935,7 +903,7 @@ export class InspectorToolbar extends LitElement {
   disconnectedCallback(): void {
     super.disconnectedCallback()
 
-    this.allowNavigation()
+    window.onbeforeunload = null
 
     this.aiManager.destroy()
     this.inspectionManager.destroy()
