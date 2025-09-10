@@ -10,6 +10,16 @@ export const ElementDataSchema = z.object({
   attributes: z.record(z.string(), z.string()),
   children: z.array(z.any()),
   imagePath: z.string().optional(),
+  computedStyles: z.object({
+    width: z.number(), // outerWidth (offsetWidth)
+    height: z.number(), // outerHeight (offsetHeight)
+    fontSize: z.string(), // computed font-size
+    fontFamily: z.string(), // computed font-family
+    color: z.string().optional(), // computed color
+    backgroundColor: z.string().optional(), // computed background-color
+    display: z.string().optional(), // computed display
+    position: z.string().optional(), // computed position
+  }).optional(),
   componentData: z.object({
     componentLocation: z.string(),
     componentName: z.string().optional(),
