@@ -21,7 +21,7 @@ export interface ElementSelectionManager {
   getSelectedCount(): number
   findSelectedParent(element: Element): Element | null
   findSelectedChildren(element: Element): Element[]
-  buildHierarchicalStructure(componentFinder?: (el: Element) => any): ElementData[]
+  buildHierarchicalStructure(componentFinder?: (el: Element) => any, imagePaths?: Map<Element, string>): ElementData[]
 }
 
 export function createElementSelectionManager(): ElementSelectionManager {
@@ -223,7 +223,7 @@ export function createElementSelectionManager(): ElementSelectionManager {
 
     findSelectedChildren,
 
-    buildHierarchicalStructure(componentFinder?: (el: Element) => any): ElementData[] {
+    buildHierarchicalStructure(componentFinder?: (el: Element) => any, imagePaths?: Map<Element, string>): ElementData[] {
       const rootElements: Element[] = []
 
       selectedElements.forEach((_, element) => {
