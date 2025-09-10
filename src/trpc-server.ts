@@ -54,15 +54,21 @@ document.body.prepend(toolbar);
 
   app.post('/upload-image', (req, res) => {
     try {
-      const { base64, fileName } = req.body
+      const { base64, filePath } = req.body
 
-      if (!base64 || !fileName) {
-        res.status(400).json({ error: 'Missing base64 data or fileName' })
+      if (!base64 || !filePath) {
+        res.status(400).json({ error: 'Missing base64 data or filePath' })
         return
       }
 
-      // Create .instantcode directory if it doesn't exist
-      const uploadDir = path.join(process.cwd(), '.instantcode')
+      const cwdArgument = req.query.cwd ? String(req.query.cwd) : ''
+      const cwd = cwdArgument || process.cwd()
+      
+      // Resolve the full path - if filePath is relative, join with cwd
+      const fullPath = path.isAbsolute(filePath) ? filePath : path.join(cwd, filePath)
+      
+      // Create directory if it doesn't exist
+      const uploadDir = path.dirname(fullPath)
       if (!fs.existsSync(uploadDir)) {
         fs.mkdirSync(uploadDir, { recursive: true })
       }
@@ -74,17 +80,16 @@ document.body.prepend(toolbar);
       const buffer = Buffer.from(base64Data, 'base64')
       
       // Save file
-      const filePath = path.join(uploadDir, fileName)
-      fs.writeFileSync(filePath, buffer)
+      fs.writeFileSync(fullPath, buffer)
 
       if (verbose) {
-        console.log(`Image saved: ${filePath}`)
+        console.log(`Image saved: ${fullPath}`)
       }
 
       res.json({ 
         success: true, 
         message: 'Image uploaded successfully',
-        filePath: filePath
+        filePath: fullPath
       })
     } catch (error) {
       console.error('Error uploading image:', error)
