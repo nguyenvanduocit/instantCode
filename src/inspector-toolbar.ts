@@ -728,7 +728,7 @@ export class InspectorToolbar extends LitElement {
           try {
             // Cast to HTMLElement to satisfy TypeScript
             const htmlElement = element as HTMLElement
-            const dataUrl = await htmlToImage.toJpeg(htmlElement, {
+            const dataUrl = await htmlToImage.toPng(htmlElement, {
               quality: 0.8,
               pixelRatio: 1,
               style: {
