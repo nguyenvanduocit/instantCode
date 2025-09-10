@@ -51,6 +51,45 @@ document.body.prepend(toolbar);
       res.status(404).send('File not found')
     }
   })
+
+  app.post('/upload-image', (req, res) => {
+    try {
+      const { base64, fileName } = req.body
+
+      if (!base64 || !fileName) {
+        return res.status(400).json({ error: 'Missing base64 data or fileName' })
+      }
+
+      // Create .instantcode directory if it doesn't exist
+      const uploadDir = path.join(process.cwd(), '.instantcode')
+      if (!fs.existsSync(uploadDir)) {
+        fs.mkdirSync(uploadDir, { recursive: true })
+      }
+
+      // Extract base64 data (remove data:image/type;base64, prefix if present)
+      const base64Data = base64.replace(/^data:image\/[a-z]+;base64,/, '')
+      
+      // Create buffer from base64
+      const buffer = Buffer.from(base64Data, 'base64')
+      
+      // Save file
+      const filePath = path.join(uploadDir, fileName)
+      fs.writeFileSync(filePath, buffer)
+
+      if (verbose) {
+        console.log(`Image saved: ${filePath}`)
+      }
+
+      res.json({ 
+        success: true, 
+        message: 'Image uploaded successfully',
+        filePath: filePath
+      })
+    } catch (error) {
+      console.error('Error uploading image:', error)
+      res.status(500).json({ error: 'Failed to upload image' })
+    }
+  })
 }
 
 export async function startServer(
