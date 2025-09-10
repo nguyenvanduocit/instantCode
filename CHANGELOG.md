@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.11.0](https://github.com/nguyenvanduocit/instantCode/compare/v1.10.0...v1.11.0) (2025-09-10)
+
+
+### Features
+
+* **inspector:** add imagePaths parameter to buildHierarchicalStructure ([3798c5f](https://github.com/nguyenvanduocit/instantCode/commit/3798c5f7307b1b4b123d843e4e5b3e228a5f33cf))
+* **inspector:** add screenshot capture of selected elements ([7c5d8d9](https://github.com/nguyenvanduocit/instantCode/commit/7c5d8d90e1b015ba0a7e8461cc3ee0f8eddaedcd))
+* **inspector:** improve screenshot filename format with element metadata ([baeceff](https://github.com/nguyenvanduocit/instantCode/commit/baeceff29ea535a449dc84a5e91c5c592d2adaa3))
+* **inspector:** integrate imagePath field with client and server ([9f9e098](https://github.com/nguyenvanduocit/instantCode/commit/9f9e09826163d4489bec1e70af0a6bea125ec742))
+* **schemas:** add computed styles to ElementDataSchema ([e6bc7a9](https://github.com/nguyenvanduocit/instantCode/commit/e6bc7a908a2c4385b90175e7dcf276060f618237))
+* **schemas:** add imagePath parameter to buildHierarchicalStructure ([93f38c9](https://github.com/nguyenvanduocit/instantCode/commit/93f38c9bea7c5da055e694fc88b1c925ae182c14))
+* **schemas:** add imagePath to ElementDataSchema ([7c95f73](https://github.com/nguyenvanduocit/instantCode/commit/7c95f73cddf0582e1f2353a37b02653bff31a6d3))
+* **server:** add POST endpoint for base64 image upload ([e0baafd](https://github.com/nguyenvanduocit/instantCode/commit/e0baafd0ed69ad20bc1749ef0b5d741fedaad5f0))
+
+
+### Bug Fixes
+
+* **inspector:** send full file path for image uploads ([d93e6a6](https://github.com/nguyenvanduocit/instantCode/commit/d93e6a6d4455724ff574f78612273a2f5c79d2d8))
+* **server:** accept full file path in upload-image endpoint ([35ee512](https://github.com/nguyenvanduocit/instantCode/commit/35ee512210f8befc482c2ae2c96cbfc648947128))
+* **server:** improve return statement in upload-image endpoint ([a8b8738](https://github.com/nguyenvanduocit/instantCode/commit/a8b87387df10121679bec4b69b4a9b7fab2c0078))
+* **server:** simplify public address handling ([37e7581](https://github.com/nguyenvanduocit/instantCode/commit/37e75813334fd2d57cf26cd3a037e38166c2b28d))
+
 ## [1.10.0](https://github.com/nguyenvanduocit/instantCode/compare/v1.9.2...v1.10.0) (2025-08-27)
 
 
