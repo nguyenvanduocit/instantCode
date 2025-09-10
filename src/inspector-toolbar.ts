@@ -740,7 +740,7 @@ export class InspectorToolbar extends LitElement {
             
             // Create filename with index and tag name
             const tagName = element.tagName.toLowerCase()
-            const fileName = `element__index-${index + 1}__tag-${tagName}.jpg`
+            const fileName = `element__index-${index + 1}__tag-${tagName}.png`
             // Create full path by combining cwd with .instantcode directory and filename
             const fullPath = `${this.cwd}/.instantcode/${fileName}`
             const uploadResponse = await fetch(`${this.aiEndpoint}/upload-image`, {
