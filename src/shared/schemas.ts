@@ -9,6 +9,7 @@ export const ElementDataSchema = z.object({
   textContent: z.string(),
   attributes: z.record(z.string(), z.string()),
   children: z.array(z.any()),
+  imagePath: z.string().optional(),
   componentData: z.object({
     componentLocation: z.string(),
     componentName: z.string().optional(),
