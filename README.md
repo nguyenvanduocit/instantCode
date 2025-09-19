@@ -197,6 +197,10 @@ For production deployments behind nginx, Apache, or cloud load balancers:
 bunx instantcode --listen localhost --public-address https://ai.yourdomain.com
 ```
 
+**Understanding the addresses:**
+- `listenAddress` (`--listen`) - Where the InstantCode server listens for connections from the inspector toolbar
+- `publicAddress` (`--public-address`) - The public URL used by the browser to load and connect to the inspector toolbar
+
 Example nginx config:
 ```nginx
 location /instantcode/ {
