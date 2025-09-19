@@ -76,6 +76,7 @@ inspectorPlugin({
   port: 7318,                            // Port to run server on (default: 7318)
   verbose: false,                        // Enable detailed logging (default: false)
 })
+```
 
 ## Framework Support
 
