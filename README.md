@@ -69,38 +69,13 @@ That's it! The InstantCode toolbar will automatically appear in your application
 
 ## Plugin Configuration
 
-### Enable Team Collaboration
-
-Want your entire team to modify the app? Or let users customize the app themselves? Run InstantCode on a server!
+The Vite plugin accepts these options:
 
 ```typescript
 inspectorPlugin({
   port: 7318,                            // Port to run server on (default: 7318)
-  listenAddress: '0.0.0.0',              // Allow connections from anywhere
-  publicAddress: 'https://ai.example.com', // Your server's public URL
   verbose: false,                        // Enable detailed logging (default: false)
 })
-```
-
-**How it works:**
-- `listenAddress: '0.0.0.0'` - Makes the InstantCode server accessible from any network
-- `publicAddress` - The URL where your team accesses the inspector toolbar
-
-**Example Setup for Team Access:**
-```typescript
-// Deploy your app on a server at https://myapp.com
-// Configure InstantCode to be accessible:
-inspectorPlugin({
-  listenAddress: '0.0.0.0',              // Accept connections from team members
-  publicAddress: 'https://myapp.com:7318' // Where the toolbar connects
-})
-```
-
-Now anyone on your team can:
-1. Open the app at `https://myapp.com`
-2. Use the InstantCode toolbar to modify the UI
-3. Changes are saved directly to the server's source files
-4. Everyone sees updates in real-time!
 
 ## Framework Support
 
