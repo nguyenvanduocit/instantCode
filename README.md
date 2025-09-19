@@ -77,7 +77,6 @@ inspectorPlugin({
   listenAddress: 'localhost',            // Server binding address (default: 'localhost')
   publicAddress: 'https://ai.example.com', // Public URL for reverse proxy (optional)
   verbose: false,                        // Enable detailed logging (default: false)
-  mock: false,                          // Enable mock mode (default: false)
 })
 ```
 
@@ -101,14 +100,6 @@ inspectorPlugin({
   listenAddress: '0.0.0.0',  // Allow external connections
   port: 7318
 })
-```
-
-### Mock mode
-
-Set `mock: true` in the plugin options to develop UI without Claude Code installed or external calls. The server will stream a deterministic series of frames that mimic actual responses (including a sample "🟢 Vue component found" message). You can also enable mock mode via environment variable when running the standalone server:
-
-```bash
-INSTANTCODE_MOCK=true bunx instantcode
 ```
 
 ## Framework Support
@@ -145,9 +136,6 @@ bunx instantcode --listen localhost --public-address https://ai.example.com
 
 # Enable verbose logging
 bunx instantcode --verbose
-
-# Enable mock mode
-bunx instantcode --mock
 ```
 
 #### CLI Options
@@ -156,7 +144,6 @@ bunx instantcode --mock
 - `-l, --listen <address>` - Address to bind server to (default: localhost)
 - `-a, --public-address <url>` - Public URL for reverse proxy scenarios
 - `-V, --verbose` - Enable verbose logging
-- `-m, --mock` - Enable mock mode (skip Claude Code)
 - `-h, --help` - Show help message
 - `-v, --version` - Show version
 

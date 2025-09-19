@@ -19,7 +19,6 @@ export interface ServerInstance {
   listenAddress: string
   publicAddress: string
   verbose: boolean
-  isMock: boolean
 }
 
 function setupRoutes(app: Express, publicAddress: string, verbose: boolean): void {
@@ -102,8 +101,7 @@ export async function startServer(
   port: number,
   listenAddress: string,
   publicAddress: string,
-  verbose = false,
-  isMock = false
+  verbose = false
 ): Promise<ServerInstance> {
   const app = express()
   
@@ -121,7 +119,7 @@ export async function startServer(
     '/trpc',
     createExpressMiddleware({
       router: appRouter,
-      createContext: (opts) => createContext(opts, verbose, isMock),
+      createContext: (opts) => createContext(opts, verbose),
     })
   )
   
@@ -135,7 +133,7 @@ export async function startServer(
   applyWSSHandler({
     wss,
     router: appRouter,
-    createContext: (opts) => createWSSContext(opts, verbose, isMock),
+    createContext: (opts) => createWSSContext(opts, verbose),
   })
   
   wss.on('connection', (ws) => {
@@ -147,7 +145,7 @@ export async function startServer(
   })
   
   
-  return { app, server, wss, port, listenAddress, publicAddress, verbose, isMock }
+  return { app, server, wss, port, listenAddress, publicAddress, verbose }
 }
 
 export async function stopServer(serverInstance: ServerInstance): Promise<void> {

@@ -25,11 +25,6 @@ export interface InspectorPluginOptions {
    * @default false
    */
   verbose?: boolean;
-  /**
-   * Enable mock mode (serve deterministic mock stream instead of real backend calls)
-   * @default false
-   */
-  mock?: boolean;
 }
 
 class InspectorServerManager {
@@ -47,7 +42,6 @@ class InspectorServerManager {
       listenAddress,
       publicAddress: options.publicAddress ?? `http://${listenAddress}:${port}`,
       verbose: options.verbose ?? false,
-      mock: options.mock ?? false,
     };
   
 
@@ -116,9 +110,6 @@ class InspectorServerManager {
     }
     if (this.options.verbose) {
       args.push('--verbose');
-    }
-    if (this.options.mock) {
-      args.push('--mock');
     }
 
     this.log(`Starting inspector server: ${cmd} ${args.join(' ')}`);

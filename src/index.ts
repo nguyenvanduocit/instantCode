@@ -10,7 +10,6 @@ let isShuttingDown = false
 const args = process.argv.slice(2)
 const helpFlag = args.includes('--help') || args.includes('-h')
 const versionFlag = args.includes('--version') || args.includes('-v')
-const mockFlag = args.includes('--mock') || args.includes('-m')
 const verboseFlag = args.includes('--verbose') || args.includes('-V')
 const portFlag = args.findIndex(arg => arg === '--port' || arg === '-p')
 const listenFlag = args.findIndex(arg => arg === '--listen' || arg === '-l')
@@ -28,7 +27,6 @@ Options:
   -p, --port <number>           Port to run the server on (default: 7318)
   -l, --listen <address>        Address to bind server to (default: localhost)
   -a, --public-address <url>    Public URL for reverse proxy (default: http://localhost:7318)
-  -m, --mock                    Enable mock mode (skip Claude Code, use sample responses)
   -V, --verbose                 Enable verbose logging
   -h, --help                    Show this help message
   -v, --version                 Show version number
@@ -38,7 +36,6 @@ Examples:
   bunx instantcode --port 8080        # Start on port 8080
   bunx instantcode --listen 0.0.0.0   # Listen on all interfaces
   bunx instantcode --public-address https://ai.example.com  # Use with reverse proxy
-  bunx instantcode --mock             # Start in mock mode
   bunx instantcode --verbose          # Start with verbose logging
   
   # Use directly from GitHub:
@@ -60,12 +57,11 @@ if (versionFlag) {
   process.exit(0)
 }
 
-// Parse port, addresses, verbose, and mock settings from CLI args
+// Parse port, addresses, and verbose settings from CLI args
 let port = 7318
 let listenAddress = 'localhost'
 let publicAddress = ''
 const isVerbose = verboseFlag || process.env.VERBOSE === 'true'
-const isMock = mockFlag
 
 // Check environment variables for port override
 if (process.env.INSPECTOR_PORT) {
@@ -146,17 +142,13 @@ function showClaudeCodeInstallationInstructions(): void {
 
 async function main() {
   try {
-    // Check if Claude Code is installed (skip in mock mode)
-    if (!isMock) {
-      if (!checkClaudeCodeInstallation()) {
-        showClaudeCodeInstallationInstructions()
-        process.exit(1)
-      }
-    } else {
-      console.log('🧪 Starting in MOCK mode - skipping Claude Code check')
+    // Check if Claude Code is installed
+    if (!checkClaudeCodeInstallation()) {
+      showClaudeCodeInstallationInstructions()
+      process.exit(1)
     }
 
-    serverInstance = await startServer(port, listenAddress, publicAddress, isVerbose, isMock)
+    serverInstance = await startServer(port, listenAddress, publicAddress, isVerbose)
     console.log(`✅ Server listening on ${listenAddress}:${port}`)
     console.log(`🌐 Public address: ${publicAddress}`)
     console.log(`📋 Add to your webpage: <script src="${publicAddress}/inspector-toolbar.js"></script>`)
