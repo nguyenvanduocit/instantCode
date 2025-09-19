@@ -11,7 +11,7 @@ After installing the plugin, you can:
 - **Wait for AI to modify your code** - it automatically finds and updates the source files
 - **See instant results** - your changes appear immediately in the browser
 
-No need to search through files or remember CSS properties - just point and tell!
+> Save cognitive load, because it's precious.
 
 ## Prerequisites
 
@@ -32,16 +32,12 @@ The fastest way to get started is using our Vite plugin. This automatically hand
 ### 1. Install InstantCode
 
 ```bash
-npm install --save-dev instantcode
-# or
 bun add -d instantcode
-# or  
-yarn add -D instantcode
 ```
 
 ### 2. Add to Your Vite Config
 
-Add the plugin to your `vite.config.ts` or `vite.config.js`:
+Add the plugin to your `vite.config.ts`:
 
 ```typescript
 import { defineConfig } from 'vite';
@@ -49,7 +45,6 @@ import inspectorPlugin from 'instantcode/vite-plugin';
 
 export default defineConfig({
   plugins: [
-    // Your existing plugins...
     inspectorPlugin(),
   ],
 });
@@ -58,14 +53,10 @@ export default defineConfig({
 ### 3. Start Your Dev Server
 
 ```bash
-npm run dev
-# or
 bun dev
-# or
-yarn dev
 ```
 
-That's it! The InstantCode toolbar will automatically appear in your application.
+That's it! The InstantCode toolbar will automatically appear in your application and ready to use.
 
 ## Plugin Configuration
 
@@ -73,8 +64,8 @@ The Vite plugin accepts these options:
 
 ```typescript
 inspectorPlugin({
-  port: 7318,                            // Port to run server on (default: 7318)
-  verbose: false,                        // Enable detailed logging (default: false)
+  port: 7318,
+  verbose: false,
 })
 ```
 
@@ -97,8 +88,8 @@ Want your entire team to modify the app? Or let users customize the app themselv
 ```typescript
 inspectorPlugin({
   port: 7318,                            // Port to run server on (default: 7318)
-  listenAddress: '0.0.0.0',              // Allow connections from anywhere
-  publicAddress: 'https://ai.example.com', // Your server's public URL
+  listenAddress: '0.0.0.0',              // Used for socket connection between the toolbar and the server
+  publicAddress: 'https://ai.example.com', // Used to serve the inspector-toolbar.js file
   verbose: false,                        // Enable detailed logging (default: false)
 })
 ```
@@ -173,57 +164,4 @@ Add to your HTML:
 <script src="https://ai.yourdomain.com/inspector-toolbar.js"></script>
 ```
 
-## Troubleshooting
-
-### Plugin Not Working?
-1. Make sure you're running `npm run dev` (or equivalent)
-2. Check that InstantCode is in your `vite.config.ts`
-3. Restart your dev server
-4. Check console for error messages
-
-### Toolbar Not Appearing?
-1. Ensure Vite dev server is running
-2. Check browser console for errors
-3. Verify port 7318 isn't blocked
-4. Try refreshing the page
-
-### AI Responses Not Helpful?
-1. **Run from your project root** - this gives AI better context
-2. Be specific about what you want to achieve
-3. Select the exact element you're asking about
-4. Try rephrasing your question
-
-### Port Already In Use?
-The server automatically checks port availability. If you see this error:
-1. Use a different port: `bunx instantcode --port 8080`
-2. Stop any existing InstantCode servers
-3. Check what's using the port: `lsof -i :7318`
-4. Kill the process or restart your machine
-
-### Using with Reverse Proxy?
-For production deployments behind nginx, Apache, or cloud load balancers:
-
-```bash
-# Server listens locally, toolbar uses public URL
-bunx instantcode --listen localhost --public-address https://ai.yourdomain.com
-```
-
-**Understanding the addresses:**
-- `listenAddress` (`--listen`) - Where the InstantCode server listens for connections from the inspector toolbar
-- `publicAddress` (`--public-address`) - The public URL used by the browser to load and connect to the inspector toolbar
-
-Example nginx config:
-```nginx
-location /instantcode/ {
-    proxy_pass http://localhost:7318/;
-    proxy_http_version 1.1;
-    proxy_set_header Upgrade $http_upgrade;
-    proxy_set_header Connection 'upgrade';
-    proxy_set_header Host $host;
-    proxy_cache_bypass $http_upgrade;
-}
-```
-
----
-
-**Happy coding! 🚀** Frontend Context is here to make your web development journey smoother and more enjoyable.
+**Happy coding! 🚀** and save your precious cognitive load.
