@@ -88,11 +88,46 @@ InstantCode works with all Vite-supported frameworks:
 - 🟠 **Svelte** - Identifies components and stores
 - 📄 **Vanilla JS** - Works with plain HTML/CSS/JS
 
-## Advanced Usage - Manual Setup
+## Advanced Usage - Team Collaboration
+
+### Enable Team-Wide Code Modification
+
+Want your entire team to modify the app? Or let users customize the app themselves? Run InstantCode on a server!
+
+```typescript
+inspectorPlugin({
+  port: 7318,                            // Port to run server on (default: 7318)
+  listenAddress: '0.0.0.0',              // Allow connections from anywhere
+  publicAddress: 'https://ai.example.com', // Your server's public URL
+  verbose: false,                        // Enable detailed logging (default: false)
+})
+```
+
+**How it works:**
+- `listenAddress: '0.0.0.0'` - Makes the InstantCode server accessible from any network
+- `publicAddress` - The URL where your team accesses the inspector toolbar
+
+**Example Setup for Team Access:**
+```typescript
+// Deploy your app on a server at https://myapp.com
+// Configure InstantCode to be accessible:
+inspectorPlugin({
+  listenAddress: '0.0.0.0',              // Accept connections from team members
+  publicAddress: 'https://myapp.com:7318' // Where the toolbar connects
+})
+```
+
+Now anyone on your team can:
+1. Open the app at `https://myapp.com`
+2. Use the InstantCode toolbar to modify the UI
+3. Changes are saved directly to the server's source files
+4. Everyone sees updates in real-time!
+
+### Manual Setup (Without Vite)
 
 If you prefer manual control or aren't using Vite:
 
-### Run Standalone Server
+#### Run Standalone Server
 
 ```bash
 # Navigate to your project directory first (important for context!)
@@ -104,7 +139,7 @@ bunx instantcode@latest
 # With custom port
 bunx instantcode --port 8080
 
-# Listen on all interfaces
+# Listen on all interfaces (for team access)
 bunx instantcode --listen 0.0.0.0
 
 # Use with reverse proxy
@@ -123,7 +158,7 @@ bunx instantcode --verbose
 - `-h, --help` - Show help message
 - `-v, --version` - Show version
 
-### Add Script Manually
+#### Add Script Manually
 
 Add to your HTML:
 
