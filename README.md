@@ -69,38 +69,38 @@ That's it! The InstantCode toolbar will automatically appear in your application
 
 ## Plugin Configuration
 
-The Vite plugin accepts these options:
+### Enable Team Collaboration
+
+Want your entire team to modify the app? Or let users customize the app themselves? Run InstantCode on a server!
 
 ```typescript
 inspectorPlugin({
   port: 7318,                            // Port to run server on (default: 7318)
-  listenAddress: 'localhost',            // Server binding address (default: 'localhost')
-  publicAddress: 'https://ai.example.com', // Public URL for reverse proxy (optional)
+  listenAddress: '0.0.0.0',              // Allow connections from anywhere
+  publicAddress: 'https://ai.example.com', // Your server's public URL
   verbose: false,                        // Enable detailed logging (default: false)
 })
 ```
 
-### Address Configuration
+**How it works:**
+- `listenAddress: '0.0.0.0'` - Makes the InstantCode server accessible from any network
+- `publicAddress` - The URL where your team accesses the inspector toolbar
 
-**Basic Setup** (default):
-- Server listens on `localhost:7318`
-- Toolbar uses `http://localhost:7318`
-
-**Reverse Proxy Setup**:
+**Example Setup for Team Access:**
 ```typescript
+// Deploy your app on a server at https://myapp.com
+// Configure InstantCode to be accessible:
 inspectorPlugin({
-  listenAddress: 'localhost',           // Server binds to localhost
-  publicAddress: 'https://ai.mysite.com' // Toolbar uses public URL
+  listenAddress: '0.0.0.0',              // Accept connections from team members
+  publicAddress: 'https://myapp.com:7318' // Where the toolbar connects
 })
 ```
 
-**Listen on All Interfaces**:
-```typescript
-inspectorPlugin({
-  listenAddress: '0.0.0.0',  // Allow external connections
-  port: 7318
-})
-```
+Now anyone on your team can:
+1. Open the app at `https://myapp.com`
+2. Use the InstantCode toolbar to modify the UI
+3. Changes are saved directly to the server's source files
+4. Everyone sees updates in real-time!
 
 ## Framework Support
 
