@@ -10,7 +10,6 @@ import {
   type PageInfo,
   type SendMessageResponse
 } from '../shared/schemas'
-import { sampleSendMessageResponses } from '../sample'
 
 const t = initTRPC.context<Context>().create({
   transformer: superjson,
@@ -52,30 +51,6 @@ export const appRouter = router({
       ctx.logger.log(formattedPrompt)
 
       try {
-        // Mock mode: stream deterministic frames for UI/dev without real backend calls
-        if (ctx.isMock) {
-          ctx.logger.log(`🧪 [SERVER ${subscriptionId}] Mock mode enabled - streaming sample messages`)
-          for await (const message of sampleSendMessageResponses(input)) {
-            if (signal?.aborted) {
-              yield {
-                type: 'result',
-                subtype: 'error',
-                is_error: true,
-                duration_ms: 0,
-                duration_api_ms: 0,
-                result: 'Request was cancelled',
-                session_id: input.sessionId || ''
-              } as SendMessageResponse
-              break
-            }
-            yield message as SendMessageResponse
-            ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent mock message: ${message.type}`)
-          }
-          ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent mock completion message`)
-          ctx.logger.log(`🔴 [SERVER] Subscription ${subscriptionId} ended`)
-          return
-        }
-
         const abortController = new AbortController()
         
         // Forward the tRPC signal cancellation to our AbortController
