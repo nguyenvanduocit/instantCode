@@ -289,6 +289,9 @@ export class InspectorToolbar extends LitElement {
             <button class="action-button clear-button" @click=${this.handleClearElements}>
               <span>Clear</span>
             </button>
+            <button class="action-button copy-button" @click=${this.handleCopyPrompt}>
+              <span>Copy</span>
+            </button>
           `)}
           ${when(this.isInspecting, () => html`
             <button class="action-button close-button" @click=${this.handleCloseInspection}>
@@ -586,6 +589,28 @@ export class InspectorToolbar extends LitElement {
     this.exitInspectionModeInternal()
   }
 
+  private async handleCopyPrompt() {
+    const prompt = this.promptInputRef.value?.value?.trim()
+    if (!prompt) {
+      this.logger.log('Empty prompt, nothing to copy')
+      return
+    }
+
+    try {
+      const promptData = await this.buildPromptData(prompt)
+      const formattedData = this.formatPromptForClipboard(promptData)
+
+      await navigator.clipboard.writeText(formattedData)
+      this.showCopyFeedback()
+
+      this.logger.log('Prompt data copied to clipboard')
+    } catch (error) {
+      this.logger.error('Failed to copy prompt to clipboard:', error)
+      // Fallback: show the data in a modal or alert
+      this.showCopyError()
+    }
+  }
+
   private async handleNewChat() {
     if (this.isProcessing) {
       this.logger.log('Cannot start new chat while processing')
@@ -695,6 +720,110 @@ export class InspectorToolbar extends LitElement {
     return false
   }
 
+  private async buildPromptData(prompt: string) {
+    const pageInfo = this.getCurrentPageInfo()
+
+    // Capture console messages based on prompt keywords
+    let consoleErrors: string[] | undefined
+    let consoleWarnings: string[] | undefined
+    let consoleInfo: string[] | undefined
+
+    if (prompt.includes('@error')) {
+      consoleErrors = captureConsoleErrors()
+    }
+
+    if (prompt.includes('@warning')) {
+      consoleWarnings = captureConsoleWarnings()
+    }
+
+    if (prompt.includes('@info')) {
+      consoleInfo = captureConsoleInfo()
+    }
+
+    // Build hierarchical structure for selected elements
+    const selectedElementsHierarchy = this.selectionManager.buildHierarchicalStructure(
+      (el) => findNearestComponent(el, this.verbose)
+    )
+
+    return {
+      userPrompt: prompt,
+      selectedElements: selectedElementsHierarchy,
+      pageInfo,
+      cwd: this.cwd,
+      sessionId: this.sessionId || undefined,
+      consoleErrors,
+      consoleWarnings,
+      consoleInfo
+    }
+  }
+
+  private formatPromptForClipboard(promptData: any): string {
+    return yaml.dump(promptData, {
+      indent: 2,
+      lineWidth: 120,
+      noRefs: true
+    })
+  }
+
+  private showCopyFeedback() {
+    // Create temporary visual feedback
+    const feedback = document.createElement('div')
+    feedback.textContent = 'Copied to clipboard!'
+    feedback.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #28a745;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-size: 14px;
+      z-index: 10000;
+      pointer-events: none;
+      animation: fadeInOut 2s ease-in-out;
+    `
+
+    // Add animation keyframes if they don't exist
+    if (!document.querySelector('#copy-feedback-styles')) {
+      const style = document.createElement('style')
+      style.id = 'copy-feedback-styles'
+      style.textContent = `
+        @keyframes fadeInOut {
+          0% { opacity: 0; transform: translateY(-10px); }
+          20% { opacity: 1; transform: translateY(0); }
+          80% { opacity: 1; transform: translateY(0); }
+          100% { opacity: 0; transform: translateY(-10px); }
+        }
+      `
+      document.head.appendChild(style)
+    }
+
+    document.body.appendChild(feedback)
+    setTimeout(() => feedback.remove(), 2000)
+  }
+
+  private showCopyError() {
+    // Create temporary error feedback
+    const feedback = document.createElement('div')
+    feedback.textContent = 'Failed to copy to clipboard'
+    feedback.style.cssText = `
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      background: #dc3545;
+      color: white;
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-size: 14px;
+      z-index: 10000;
+      pointer-events: none;
+      animation: fadeInOut 2s ease-in-out;
+    `
+
+    document.body.appendChild(feedback)
+    setTimeout(() => feedback.remove(), 2000)
+  }
+
   private async handlePromptSubmit(prompt: string): Promise<void> {
     if (!prompt) {
       this.logger.log('Empty prompt, nothing to process')
@@ -715,15 +844,15 @@ export class InspectorToolbar extends LitElement {
     }
 
     const pageInfo = this.getCurrentPageInfo()
-    
+
     // Capture screenshots first to get image paths for elements
     let imagePaths: Map<Element, string> | undefined
     try {
       const selectedElementsArray = Array.from(this.selectionManager.getSelectedElements().keys())
-      
+
       if (selectedElementsArray.length > 0 && this.aiEndpoint) {
         imagePaths = new Map()
-        
+
         const screenshotPromises = selectedElementsArray.map(async (element, index) => {
           try {
             // Cast to HTMLElement to satisfy TypeScript
@@ -737,7 +866,7 @@ export class InspectorToolbar extends LitElement {
                 outline: "none"
               }
             })
-            
+
             // Create filename with index and tag name
             const tagName = element.tagName.toLowerCase()
             const fileName = `element__index-${index + 1}__tag-${tagName}.png`
@@ -774,14 +903,14 @@ export class InspectorToolbar extends LitElement {
             imagePaths.set(result.element, result.filePath)
           }
         })
-        
+
         this.logger.log('Screenshot capture completed', { totalElements: selectedElementsArray.length, successfulCaptures: imagePaths.size })
       }
     } catch (screenshotError) {
       this.logger.warn('Failed to capture screenshots:', screenshotError)
       // Continue without screenshots - don't fail the entire request
     }
-    
+
     const selectedElementsHierarchy = this.selectionManager.buildHierarchicalStructure(
       (el) => findNearestComponent(el, this.verbose),
       imagePaths
