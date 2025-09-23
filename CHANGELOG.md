@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.1.0](https://github.com/nguyenvanduocit/instantCode/compare/v1.0.0...v1.1.0) (2025-09-23)
+
+
+### Features
+
+* **inspector:** add copy button to individual messages ([7b24f29](https://github.com/nguyenvanduocit/instantCode/commit/7b24f298b0328b2fc5a69c79cd18ec06e964b759))
+* **inspector:** add copy button to toolbar for prompt data ([183c7ff](https://github.com/nguyenvanduocit/instantCode/commit/183c7fffa2a6b390368807471394cda25ac7690e))
+
 ## 1.0.0 (2025-09-19)
 
 
