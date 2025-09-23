@@ -547,7 +547,14 @@ export class InspectorToolbar extends LitElement {
         'user': message.type === 'user',
         'system': message.type === 'system',
         'result': message.type === 'result'
-      })} .innerHTML=${formattedMessage}></div>
+      })} .innerHTML=${formattedMessage}>
+        <button class="message-copy-button" @click=${() => this.handleCopyMessage(content)} title="Copy message">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+          </svg>
+        </button>
+      </div>
     `
   }
 
@@ -609,6 +616,35 @@ export class InspectorToolbar extends LitElement {
       // Fallback: show the data in a modal or alert
       this.showCopyError()
     }
+  }
+
+  private async handleCopyMessage(content: string) {
+    try {
+      // Extract text content from HTML, handling empty content
+      const textContent = this.extractTextFromHtml(content) || '[Empty message]'
+
+      await navigator.clipboard.writeText(textContent)
+      this.showCopyFeedback()
+      this.logger.log('Message copied to clipboard')
+    } catch (error) {
+      this.logger.error('Failed to copy message to clipboard:', error)
+      this.showCopyError()
+    }
+  }
+
+  private extractTextFromHtml(html: string): string {
+    if (!html || html.trim() === '') {
+      return ''
+    }
+
+    // Create a temporary div to parse HTML
+    const tempDiv = document.createElement('div')
+    tempDiv.innerHTML = html
+
+    // Get text content, preserving line breaks from <br> and <p> tags
+    const textContent = tempDiv.textContent || tempDiv.innerText || ''
+
+    return textContent.trim()
   }
 
   private async handleNewChat() {

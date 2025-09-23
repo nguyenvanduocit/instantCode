@@ -405,6 +405,8 @@ export const TOOLBAR_STYLES = css`
     color: var(--color-text);
     line-height: 1.4;
     font-size: 11px;
+    display: flex;
+    position: relative;
   }
 
   .message.assistant {
@@ -657,5 +659,38 @@ export const TOOLBAR_STYLES = css`
 
   .processing-text {
     font-weight: 500;
+  }
+
+  .message-copy-button {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 20px;
+    height: 20px;
+    border: none;
+    background: rgba(255, 255, 255, 0.8);
+    border-radius: 3px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: all 0.2s ease;
+    color: #64748b;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+
+  .message:hover .message-copy-button {
+    opacity: 1;
+  }
+
+  .message-copy-button:hover {
+    background: rgba(255, 255, 255, 0.95);
+    color: #374151;
+    transform: scale(1.05);
+  }
+
+  .message-copy-button:active {
+    transform: scale(0.95);
   }
 `
