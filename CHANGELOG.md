@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/nguyenvanduocit/instantCode/compare/v1.1.0...v1.2.0) (2025-12-26)
+
+
+### Features
+
+* **inspector:** add active tools section for real-time tool feedback ([bbfc668](https://github.com/nguyenvanduocit/instantCode/commit/bbfc668aee66413d24b513696e6c97843153aead))
+
 ## [1.1.0](https://github.com/nguyenvanduocit/instantCode/compare/v1.0.0...v1.1.0) (2025-09-23)
 
 
