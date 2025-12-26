@@ -115,8 +115,21 @@ if (!publicAddress) {
 }
 
 function checkClaudeCodeInstallation(): boolean {
+  // Add common Claude Code installation paths to PATH for this check
+  const homedir = process.env.HOME || process.env.USERPROFILE || ''
+  const additionalPaths = [
+    `${homedir}/.bun/bin`,
+    `${homedir}/.local/bin`,
+    '/usr/local/bin',
+  ].join(':')
+
+  const pathEnv = process.env.PATH ? `${additionalPaths}:${process.env.PATH}` : additionalPaths
+
   try {
-    execSync('claude --version', { stdio: 'pipe' })
+    execSync('claude --version', {
+      stdio: 'pipe',
+      env: { ...process.env, PATH: pathEnv }
+    })
     return true
   } catch (error) {
     return false

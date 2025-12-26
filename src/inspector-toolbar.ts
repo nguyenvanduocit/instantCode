@@ -7,6 +7,7 @@ import { customElement, property, state } from 'lit/decorators.js'
 import { when } from 'lit/directives/when.js'
 import { classMap } from 'lit/directives/class-map.js'
 import { createRef, ref, type Ref } from 'lit/directives/ref.js'
+import { unsafeHTML } from 'lit/directives/unsafe-html.js'
 
 import * as yaml from 'js-yaml'
 import * as htmlToImage from 'html-to-image'
@@ -31,9 +32,21 @@ const CONFIG = {
   MAX_CONTENT_LENGTH: 10000,
   MAX_RESULT_LENGTH: 10000,
   MAX_INPUT_DISPLAY: 10000,
-  MESSAGE_HISTORY_LIMIT: 10
+  MESSAGE_HISTORY_LIMIT: 100 // Limit messages to prevent UI lag on long conversations
 } as const
 
+// Tool call tracking for input/output correlation
+interface ToolCall {
+  id: string                    // tool_use_id
+  name: string                  // e.g., "Read", "Bash"
+  input: Record<string, any>
+  summary: string               // generated summary
+  status: 'pending' | 'success' | 'error'
+  result?: string
+  startTime: number
+  endTime?: number
+  isExpanded: boolean
+}
 
 @customElement('inspector-toolbar')
 export class InspectorToolbar extends LitElement {
@@ -71,6 +84,14 @@ export class InspectorToolbar extends LitElement {
 
   @state()
   private accessor showProcessingMessage: boolean
+
+  @state()
+  private accessor toolCalls: Map<string, ToolCall> = new Map()
+
+  // Computed: get pending tool calls for immediate display
+  private get pendingToolCalls(): ToolCall[] {
+    return Array.from(this.toolCalls.values()).filter(t => t.status === 'pending')
+  }
 
   // Managers
   private selectionManager: ElementSelectionManager
@@ -157,9 +178,15 @@ export class InspectorToolbar extends LitElement {
 
 
   private addMessage(message: SendMessageResponse): void {
-    // Track TodoWrite tool IDs from assistant messages
+    // Track TodoWrite tool IDs and process tool use blocks from assistant messages
     if (message.type === 'assistant') {
       this.trackTodoWriteToolIds(message)
+      this.processToolUseBlocks(message)
+    }
+
+    // Process tool results and update tool call status
+    if (message.type === 'user') {
+      this.processToolResultBlocks(message as Extract<SendMessageResponse, { type: 'user' }>)
     }
 
     // Skip displaying TodoWrite tool result messages
@@ -167,7 +194,23 @@ export class InspectorToolbar extends LitElement {
       return
     }
 
-    this.messages = [...this.messages, message]
+    // Skip displaying linked tool results (they show in tool cards instead)
+    if (this.shouldHideAsLinkedToolResult(message)) {
+      return
+    }
+
+    // Add message and enforce limit to prevent UI lag
+    const newMessages = [...this.messages, message]
+
+    // Keep only the most recent messages, but always preserve system init message
+    if (newMessages.length > CONFIG.MESSAGE_HISTORY_LIMIT) {
+      const systemMessage = newMessages.find(m => m.type === 'system')
+      const nonSystemMessages = newMessages.filter(m => m.type !== 'system')
+      const trimmedMessages = nonSystemMessages.slice(-CONFIG.MESSAGE_HISTORY_LIMIT + (systemMessage ? 1 : 0))
+      this.messages = systemMessage ? [systemMessage, ...trimmedMessages] : trimmedMessages
+    } else {
+      this.messages = newMessages
+    }
 
     // Auto-scroll to bottom
     this.updateComplete.then(() => {
@@ -180,6 +223,7 @@ export class InspectorToolbar extends LitElement {
   private clearMessagesInternal(): void {
     this.messages = []
     this.todoWriteToolIds.clear()
+    this.toolCalls = new Map()
   }
 
   private clearPrompt(): void {
@@ -225,6 +269,111 @@ export class InspectorToolbar extends LitElement {
     }
   }
 
+  private generateToolSummary(name: string, input: Record<string, any>): string {
+    switch (name) {
+      case 'Bash':
+        const cmd = input.command || input.cmd || ''
+        return cmd.length > 60 ? cmd.substring(0, 60) + '...' : cmd
+      case 'Read':
+        return input.file_path || 'file'
+      case 'Write':
+      case 'Edit':
+        return input.file_path || 'file'
+      case 'Glob':
+        return input.pattern || 'pattern'
+      case 'Grep':
+        const pattern = input.pattern || ''
+        const path = input.path || 'cwd'
+        return `"${pattern.substring(0, 20)}" in ${path}`
+      case 'WebFetch':
+        return input.url || 'URL'
+      case 'WebSearch':
+        return input.query || 'search'
+      case 'TodoWrite':
+        const count = Array.isArray(input.todos) ? input.todos.length : 0
+        return `${count} task${count !== 1 ? 's' : ''}`
+      case 'Task':
+        return input.description || input.prompt?.substring(0, 40) || 'task'
+      default:
+        // Show first meaningful input value
+        const firstVal = Object.values(input)[0]
+        if (firstVal !== undefined && firstVal !== null) {
+          const str = String(firstVal)
+          return str.length > 40 ? str.substring(0, 40) + '...' : str
+        }
+        return name
+    }
+  }
+
+  private processToolUseBlocks(message: Extract<SendMessageResponse, { type: 'assistant' }>): void {
+    const content = message.message.content || []
+    content.forEach((block: any) => {
+      if (block.type === 'tool_use' && block.id && block.name) {
+        // Skip TodoWrite - it has its own special rendering
+        if (block.name === 'TodoWrite') return
+
+        const toolCall: ToolCall = {
+          id: block.id,
+          name: block.name,
+          input: block.input || {},
+          summary: this.generateToolSummary(block.name, block.input || {}),
+          status: 'pending',
+          startTime: Date.now(),
+          isExpanded: false
+        }
+        this.toolCalls = new Map(this.toolCalls).set(block.id, toolCall)
+      }
+    })
+  }
+
+  private processToolResultBlocks(message: Extract<SendMessageResponse, { type: 'user' }>): void {
+    const content = message.message.content || []
+    let hasUpdates = false
+
+    content.forEach((block: any) => {
+      if (block.type === 'tool_result' && block.tool_use_id) {
+        const existing = this.toolCalls.get(block.tool_use_id)
+        if (existing) {
+          // Only check is_error flag, don't guess based on content
+          const isError = block.is_error === true
+
+          const updated: ToolCall = {
+            ...existing,
+            status: isError ? 'error' : 'success',
+            result: block.content || '',
+            endTime: Date.now()
+          }
+          this.toolCalls = new Map(this.toolCalls).set(block.tool_use_id, updated)
+          hasUpdates = true
+        }
+      }
+    })
+  }
+
+  private shouldHideAsLinkedToolResult(message: SendMessageResponse): boolean {
+    if (message.type !== 'user') return false
+    const content = (message as any).message?.content || []
+
+    // Hide if ALL blocks are tool_results that we're tracking (excluding TodoWrite)
+    if (content.length === 0) return false
+
+    return content.every((block: any) => {
+      if (block.type !== 'tool_result') return false
+      if (!block.tool_use_id) return false
+      // Don't hide TodoWrite results (they're handled separately)
+      if (this.todoWriteToolIds.has(block.tool_use_id)) return false
+      // Hide if we're tracking this tool call
+      return this.toolCalls.has(block.tool_use_id)
+    })
+  }
+
+  public toggleToolExpanded(toolId: string): void {
+    const existing = this.toolCalls.get(toolId)
+    if (existing) {
+      const updated = { ...existing, isExpanded: !existing.isExpanded }
+      this.toolCalls = new Map(this.toolCalls).set(toolId, updated)
+    }
+  }
 
   render() {
     return html`
@@ -311,7 +460,18 @@ export class InspectorToolbar extends LitElement {
             <div class="json-content" ${ref(this.jsonContentRef)}>
               ${this.messages.map(message => this.renderMessage(message))}
             </div>
-            ${when(this.showProcessingMessage, () => html`
+            ${when(this.pendingToolCalls.length > 0, () => html`
+              <div class="active-tools-section">
+                ${this.pendingToolCalls.map(tool => html`
+                  <div class="active-tool-item">
+                    <div class="active-tool-spinner"></div>
+                    <span class="active-tool-name" data-tool="${tool.name}">${tool.name}</span>
+                    <span class="active-tool-summary">${tool.summary}</span>
+                  </div>
+                `)}
+              </div>
+            `)}
+            ${when(this.showProcessingMessage && this.pendingToolCalls.length === 0, () => html`
               <div class="processing-message show">
                 <div class="processing-spinner"></div>
                 <span class="processing-text">Processing request...</span>
@@ -342,26 +502,94 @@ export class InspectorToolbar extends LitElement {
     }
   }
 
-  private renderAssistantMessage(message: Extract<SendMessageResponse, { type: 'assistant' }>): { content: string, badge: string, meta: string } {
+  private getToolStatusIcon(status: 'pending' | 'success' | 'error'): string {
+    switch (status) {
+      case 'pending':
+        return '<span class="tool-status-icon pending"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg></span>'
+      case 'success':
+        return '<span class="tool-status-icon success"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg></span>'
+      case 'error':
+        return '<span class="tool-status-icon error"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg></span>'
+    }
+  }
+
+  private renderToolCard(toolId: string): string {
+    const tool = this.toolCalls.get(toolId)
+    if (!tool) return ''
+
+    const statusIcon = this.getToolStatusIcon(tool.status)
+    const duration = tool.endTime ? `${tool.endTime - tool.startTime}ms` : ''
+    const expandIcon = tool.isExpanded ? '▲' : '▼'
+
+    const inputYaml = yaml.dump(tool.input, { indent: 2 })
+    const inputDisplay = inputYaml.length > CONFIG.MAX_INPUT_DISPLAY
+      ? inputYaml.substring(0, CONFIG.MAX_INPUT_DISPLAY) + '...'
+      : inputYaml
+
+    const resultDisplay = tool.result
+      ? (tool.result.length > CONFIG.MAX_RESULT_LENGTH
+        ? tool.result.substring(0, CONFIG.MAX_RESULT_LENGTH) + '...'
+        : tool.result)
+      : ''
+
+    const bodyHtml = tool.isExpanded ? `
+      <div class="tool-card-body">
+        <div class="tool-section">
+          <div class="tool-section-label">Input</div>
+          <pre><code>${HtmlUtils.escapeHtml(inputDisplay)}</code></pre>
+        </div>
+        ${tool.result ? `
+          <div class="tool-section">
+            <div class="tool-section-label">Output</div>
+            <pre><code>${HtmlUtils.escapeHtml(resultDisplay)}</code></pre>
+          </div>
+        ` : ''}
+      </div>
+    ` : ''
+
+    return `
+      <div class="tool-card ${tool.status}${tool.isExpanded ? ' expanded' : ''}" data-tool-id="${toolId}">
+        <div class="tool-card-header" onclick="this.getRootNode().host.toggleToolExpanded('${toolId}')">
+          ${statusIcon}
+          <span class="tool-name-badge" data-tool="${HtmlUtils.escapeHtml(tool.name)}">${HtmlUtils.escapeHtml(tool.name)}</span>
+          <span class="tool-summary">${HtmlUtils.escapeHtml(tool.summary)}</span>
+          ${duration ? `<span class="tool-duration">${duration}</span>` : ''}
+          <span class="tool-expand-icon">${expandIcon}</span>
+        </div>
+        ${bodyHtml}
+      </div>
+    `
+  }
+
+  private renderAssistantMessage(message: Extract<SendMessageResponse, { type: 'assistant' }>): { content: string, badge: string, meta: string, toolsOnly?: boolean } {
     const assistantMessage = message.message
-    type Segment = { kind: 'text', value: string } | { kind: 'html', value: string }
+    type Segment = { kind: 'text', value: string } | { kind: 'html', value: string } | { kind: 'tool', toolId: string }
     const segments: Segment[] = []
     let containsTodoList = false
-    let toolName = ""
+    let hasToolCalls = false
+    let hasTextContent = false
+
     if (assistantMessage.content && Array.isArray(assistantMessage.content)) {
       assistantMessage.content.forEach((block: any) => {
         if (block.type === 'text' && block.text) {
+          hasTextContent = true
           segments.push({ kind: 'text', value: block.text })
         } else if (block.type === 'tool_use' && block.name) {
           if (block.name === 'TodoWrite' && block.input && 'todos' in block.input) {
             containsTodoList = true
             segments.push(this.renderTodoListFromBlock(block))
+          } else if (block.id && this.toolCalls.has(block.id)) {
+            // Use tool card for tracked tools
+            hasToolCalls = true
+            segments.push({ kind: 'tool', toolId: block.id })
           } else {
-            toolName = block.name
+            // Fallback to YAML dump for untracked tools
+            hasToolCalls = true
             const inputStr = block.input ? yaml.dump(block.input, { indent: 2 }) : '{}'
             segments.push({ kind: 'text', value: inputStr })
           }
         } else if (block.text) {
+          hasTextContent = true
           segments.push({ kind: 'text', value: block.text })
         }
       })
@@ -375,6 +603,8 @@ export class InspectorToolbar extends LitElement {
     segments.forEach(seg => {
       if (seg.kind === 'html') {
         htmlParts.push(seg.value)
+      } else if (seg.kind === 'tool') {
+        htmlParts.push(this.renderToolCard(seg.toolId))
       } else {
         const text = seg.value || ''
         const display = text.length > CONFIG.MAX_CONTENT_LENGTH
@@ -402,8 +632,11 @@ export class InspectorToolbar extends LitElement {
         metaInfo = metaInfo ? `${metaInfo} | ${tokenInfo}` : tokenInfo
       }
     }
-    ``
-    return { content, badge: (containsTodoList ? 'todo' : toolName.length > 0 ? toolName : "Claude"), meta: metaInfo }
+
+    // If ONLY tool calls (no text), render without wrapper
+    const toolsOnly = hasToolCalls && !hasTextContent && !containsTodoList
+
+    return { content, badge: (containsTodoList ? 'todo' : hasToolCalls ? 'Tool' : "Claude"), meta: metaInfo, toolsOnly }
   }
 
   private renderUserMessage(message: Extract<SendMessageResponse, { type: 'user' }>): { content: string, badge: string, meta: string } {
@@ -512,6 +745,7 @@ export class InspectorToolbar extends LitElement {
     let content = ''
     let badge = ''
     let meta = ''
+    let toolsOnly = false
 
     try {
       const result = (() => {
@@ -532,13 +766,19 @@ export class InspectorToolbar extends LitElement {
       content = result.content
       badge = result.badge
       meta = result.meta
+      toolsOnly = 'toolsOnly' in result && result.toolsOnly === true
     } catch (error) {
       console.error('Error creating message:', error)
       badge = 'Error'
       content = `<pre style="background:#fee;padding:6px;border-radius:4px;overflow-x:auto;font-size:8px"><code>${JSON.stringify(message)}</code></pre>`
     }
 
-    const formattedMessage = this.formatMessage(content, badge, meta)
+    // Tool-only messages render without wrapper
+    if (toolsOnly) {
+      return html`<div class="tool-cards-container">${unsafeHTML(content)}</div>`
+    }
+
+    const badgeClass = this.getBadgeClass(badge || '')
 
     return html`
       <div class=${classMap({
@@ -547,7 +787,10 @@ export class InspectorToolbar extends LitElement {
         'user': message.type === 'user',
         'system': message.type === 'system',
         'result': message.type === 'result'
-      })} .innerHTML=${formattedMessage}>
+      })}>
+        ${badge ? html`<span class="badge ${badgeClass}">${badge}</span>` : nothing}
+        <div class="message-content">${unsafeHTML(content)}</div>
+        ${meta ? html`<small class="meta">${meta}</small>` : nothing}
         <button class="message-copy-button" @click=${() => this.handleCopyMessage(content)} title="Copy message">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -1160,7 +1403,7 @@ export class InspectorToolbar extends LitElement {
     const badgeClass = this.getBadgeClass(badge || '')
     const badgeHtml = badge ? `<span class="badge ${badgeClass}">${badge}</span>` : ''
     const metaHtml = meta ? `<small class="meta">${meta}</small>` : ''
-    return `${badgeHtml}<div class="message-content">${content}</div>${metaHtml}</div>`
+    return `${badgeHtml}<div class="message-content">${content}</div>${metaHtml}`
   }
 
 }

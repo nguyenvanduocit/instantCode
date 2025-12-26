@@ -1,10 +1,8 @@
 import { initTRPC } from '@trpc/server'
 import superjson from 'superjson'
-import { z } from 'zod'
-import { query, Options } from '@anthropic-ai/claude-code'
+import { query, Options, AbortError } from '@anthropic-ai/claude-code'
 import type { Context } from './context'
 import {
-  ElementDataSchema,
   SendMessageSchema,
   type ElementData,
   type PageInfo,
@@ -14,6 +12,60 @@ import {
 const t = initTRPC.context<Context>().create({
   transformer: superjson,
 })
+
+/**
+ * Categorize and format error messages for better user feedback
+ */
+function formatErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return 'An unexpected error occurred'
+  }
+
+  const message = error.message.toLowerCase()
+
+  // API key / authentication errors
+  if (message.includes('api key') || message.includes('unauthorized') || message.includes('authentication')) {
+    return 'API key error: Please check your Anthropic API key configuration'
+  }
+
+  // Rate limiting
+  if (message.includes('rate limit') || message.includes('too many requests') || message.includes('429')) {
+    return 'Rate limited: Too many requests. Please wait a moment and try again'
+  }
+
+  // Network errors
+  if (message.includes('network') || message.includes('econnrefused') || message.includes('enotfound') || message.includes('fetch failed')) {
+    return 'Network error: Unable to connect to Claude API. Check your internet connection'
+  }
+
+  // Timeout errors
+  if (message.includes('timeout') || message.includes('timed out')) {
+    return 'Request timed out: The operation took too long. Try a simpler request'
+  }
+
+  // Model/capacity errors
+  if (message.includes('overloaded') || message.includes('capacity') || message.includes('503')) {
+    return 'Service temporarily unavailable: Claude is experiencing high demand. Please retry'
+  }
+
+  // Session errors
+  if (message.includes('session') || message.includes('resume')) {
+    return 'Session error: Unable to resume previous session. Starting fresh conversation'
+  }
+
+  // Claude Code CLI not found
+  if (message.includes('not found') || message.includes('enoent') || message.includes('spawn')) {
+    return 'Claude Code CLI not found: Ensure @anthropic-ai/claude-code is installed globally'
+  }
+
+  // Context length errors
+  if (message.includes('context') || message.includes('token') || message.includes('too long')) {
+    return 'Context too long: Try selecting fewer elements or shortening your prompt'
+  }
+
+  // Default: show the original message but clean it up
+  return `Error: ${error.message}`
+}
 
 export const router = t.router
 export const publicProcedure = t.procedure
@@ -100,8 +152,11 @@ export const appRouter = router({
         }
         ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent completion message`)
       } catch (error) {
-        // Check if the error is due to cancellation
-        if (error instanceof Error && (error.name === 'AbortError' || error.message.includes('aborted'))) {
+        // Check if the error is due to cancellation (use SDK's AbortError or check message)
+        const isAbortError = error instanceof AbortError ||
+          (error instanceof Error && (error.name === 'AbortError' || error.message.includes('aborted')))
+
+        if (isAbortError) {
           ctx.logger.log(`🚫 [SERVER ${subscriptionId}] Claude processing was cancelled`)
           yield {
             type: 'result',
@@ -115,14 +170,17 @@ export const appRouter = router({
           ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent cancellation messages`)
         } else {
           ctx.logger.error(`❌ [SERVER ${subscriptionId}] Claude processing error:`, error)
-          
+
+          // Use improved error message formatting
+          const userFriendlyMessage = formatErrorMessage(error)
+
           yield {
             type: 'result',
             subtype: 'error',
             is_error: true,
             duration_ms: 0,
             duration_api_ms: 0,
-            result: 'Error processing with Claude: ' + (error as Error).message,
+            result: userFriendlyMessage,
             session_id: input.sessionId,
           } as SendMessageResponse
           ctx.logger.log(`📤 [SERVER ${subscriptionId}] Sent error messages`)
@@ -130,34 +188,6 @@ export const appRouter = router({
       }
       
       ctx.logger.log(`🔴 [SERVER] Subscription ${subscriptionId} ended`)
-    }),
-
-  processElements: publicProcedure
-    .input(
-      z.object({
-        elements: z.array(ElementDataSchema),
-        prompt: z.string().optional(),
-      })
-    )
-    .mutation(({ input }) => {
-      const componentLocations: string[] = []
-
-      const extractFromElement = (element: ElementData) => {
-        if (element.componentData?.componentLocation) {
-          componentLocations.push(element.componentData.componentLocation)
-        }
-        if (element.children && Array.isArray(element.children)) {
-          element.children.forEach(extractFromElement)
-        }
-      }
-
-      input.elements.forEach(extractFromElement)
-
-      return {
-        componentLocations,
-        elementsCount: input.elements.length,
-        prompt: input.prompt,
-      }
     }),
 })
 

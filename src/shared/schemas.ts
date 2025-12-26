@@ -63,92 +63,141 @@ export const SendMessageSchema = z.object({
 })
 
 
-export const SendMessageResponseSchema = z.union([
+// API key source types matching SDK
+export const ApiKeySourceSchema = z.enum(['user', 'project', 'org', 'temporary'])
 
-// 'system' message type
-  z.object({
-    type: z.literal('system'),
-    subtype: z.literal('init'),
-    cwd: z.string(),
-    session_id: z.string(),
-    apiKeySource: z.string(), // e.g. "none"
-    mcp_servers: z.array(z.object({
-      name: z.string(),
-      status: z.string(),
+// Permission mode types matching SDK
+export const PermissionModeSchema = z.enum(['default', 'acceptEdits', 'bypassPermissions', 'plan'])
+
+// Usage schema (non-nullable as per SDK)
+export const UsageSchema = z.object({
+  input_tokens: z.number(),
+  cache_creation_input_tokens: z.number(),
+  cache_read_input_tokens: z.number(),
+  output_tokens: z.number(),
+})
+
+// Permission denial schema
+export const PermissionDenialSchema = z.object({
+  tool_name: z.string(),
+  tool_use_id: z.string(),
+  tool_input: z.record(z.string(), z.unknown()),
+})
+
+// System message - matches SDKSystemMessage
+export const SDKSystemMessageSchema = z.object({
+  type: z.literal('system'),
+  subtype: z.literal('init'),
+  apiKeySource: ApiKeySourceSchema,
+  cwd: z.string(),
+  session_id: z.string(),
+  tools: z.array(z.string()),
+  mcp_servers: z.array(z.object({
+    name: z.string(),
+    status: z.string(),
+  })),
+  model: z.string(),
+  permissionMode: PermissionModeSchema,
+  slash_commands: z.array(z.string()),
+})
+
+// Assistant message - matches SDKAssistantMessage
+export const SDKAssistantMessageSchema = z.object({
+  type: z.literal('assistant'),
+  message: z.object({
+    id: z.string(),
+    type: z.literal('message'),
+    role: z.literal('assistant'),
+    model: z.string(),
+    content: z.array(z.object({
+      type: z.string(),
+      text: z.string().optional(),
+      id: z.string().optional(),
+      name: z.string().optional(),
+      input: z.record(z.string(), z.unknown()).optional(),
     })),
-    model: z.string(), // e.g. "claude-opus-4-1-20250805"
-    permissionMode: z.string(), // e.g. "bypassPermissions"
-    slash_commands: z.array(z.string()),
-    tools: z.array(z.string()),
-  }),
-
-  // 'assistant' message type  
-  z.object({
-    type: z.literal('assistant'),
-    message: z.object({
-      id: z.string(),
-      type: z.literal('message'),
-      role: z.literal('assistant'),
-      model: z.string(),
-      content: z.array(z.object({
-        type: z.string(),
-        text: z.string().optional(),
-        id: z.string().optional(),
-        name: z.string().optional(),
-        input: z.record(z.string(), z.unknown()).optional(),
-      })),
-      stop_reason: z.string().nullable().optional(),
-      stop_sequence: z.string().nullable().optional(),
-      usage: z.object({
-        input_tokens: z.number(),
-        cache_creation_input_tokens: z.number().optional(),
-        cache_read_input_tokens: z.number().optional(),
-        output_tokens: z.number(),
-      }).optional(),
-    }),
-    parent_tool_use_id: z.string().nullable(),
-    session_id: z.string(),
-  }),
-
-  // 'user' message type
-  z.object({
-    type: z.literal('user'),
-    message: z.object({
-      role: z.literal('user'),
-      content: z.array(z.object({
-        type: z.string(), // e.g. "tool_result"
-        content: z.string().optional(),
-        tool_use_id: z.string().optional(),
-      })),
-    }),
-    parent_tool_use_id: z.string().nullable(),
-    session_id: z.string(),
-  }),
-
-  // 'result' message type
-  z.object({
-    type: z.literal('result'),
-    // Allow any subtype string; server will use 'error' for errors
-    subtype: z.string(),
-    is_error: z.boolean(),
-    duration_ms: z.number(),
-    duration_api_ms: z.number(),
-    num_turns: z.number().optional(),
-    result: z.string().optional(),
-    session_id: z.string(),
-    total_cost_usd: z.number().optional(),
+    stop_reason: z.string().nullable().optional(),
+    stop_sequence: z.string().nullable().optional(),
     usage: z.object({
       input_tokens: z.number(),
       cache_creation_input_tokens: z.number().optional(),
       cache_read_input_tokens: z.number().optional(),
       output_tokens: z.number(),
     }).optional(),
-    permission_denials: z.array(z.object({
-      tool_name: z.string(),
-      tool_use_id: z.string(),
-      tool_input: z.record(z.string(), z.unknown()),
-    })).optional(),
   }),
+  parent_tool_use_id: z.string().nullable(),
+  session_id: z.string(),
+})
+
+// User message - matches SDKUserMessage
+export const SDKUserMessageSchema = z.object({
+  type: z.literal('user'),
+  message: z.object({
+    role: z.literal('user'),
+    content: z.array(z.object({
+      type: z.string(),
+      content: z.string().optional(),
+      tool_use_id: z.string().optional(),
+    })),
+  }),
+  parent_tool_use_id: z.string().nullable(),
+  session_id: z.string(),
+})
+
+// Result message - matches SDKResultMessage discriminated union
+// Success result has `result` field, error results do not
+export const SDKResultSuccessSchema = z.object({
+  type: z.literal('result'),
+  subtype: z.literal('success'),
+  duration_ms: z.number(),
+  duration_api_ms: z.number(),
+  is_error: z.literal(false),
+  num_turns: z.number(),
+  result: z.string(),
+  session_id: z.string(),
+  total_cost_usd: z.number(),
+  usage: UsageSchema,
+  permission_denials: z.array(PermissionDenialSchema),
+})
+
+export const SDKResultErrorSchema = z.object({
+  type: z.literal('result'),
+  subtype: z.enum(['error_max_turns', 'error_during_execution']),
+  duration_ms: z.number(),
+  duration_api_ms: z.number(),
+  is_error: z.literal(true),
+  num_turns: z.number(),
+  session_id: z.string(),
+  total_cost_usd: z.number(),
+  usage: UsageSchema,
+  permission_denials: z.array(PermissionDenialSchema),
+})
+
+// Server-generated error messages (not from SDK)
+// Used for cancellation, network errors, etc.
+export const ServerErrorSchema = z.object({
+  type: z.literal('result'),
+  subtype: z.literal('error'),
+  is_error: z.literal(true),
+  duration_ms: z.number(),
+  duration_api_ms: z.number(),
+  result: z.string(),
+  session_id: z.string().optional(),
+})
+
+// Combined result schema (SDK results + server errors)
+export const SDKResultMessageSchema = z.union([
+  SDKResultSuccessSchema,
+  SDKResultErrorSchema,
+  ServerErrorSchema,
+])
+
+// Full SDK message union - matches SDKMessage from @anthropic-ai/claude-code
+export const SendMessageResponseSchema = z.union([
+  SDKSystemMessageSchema,
+  SDKAssistantMessageSchema,
+  SDKUserMessageSchema,
+  SDKResultMessageSchema,
 ])
 
 // Infer TypeScript types from Zod schemas

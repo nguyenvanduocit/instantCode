@@ -406,6 +406,7 @@ export const TOOLBAR_STYLES = css`
     line-height: 1.4;
     font-size: 11px;
     display: flex;
+    flex-direction: column;
     position: relative;
   }
 
@@ -436,13 +437,13 @@ export const TOOLBAR_STYLES = css`
   }
 
   .badge {
-    display: block;
+    display: inline-block;
+    width: fit-content;
     background: #4f46e5;
     color: white;
     font-size: 9px;
     font-weight: 600;
     padding: 2px 6px;
-    vertical-align: top;
     border-top-right-radius: 4px;
   }
 
@@ -692,5 +693,251 @@ export const TOOLBAR_STYLES = css`
 
   .message-copy-button:active {
     transform: scale(0.95);
+  }
+
+  /* Tool Cards Container - no wrapper needed */
+  .tool-cards-container {
+    padding: 0;
+  }
+
+  /* Tool Card Styles */
+  .tool-card {
+    border-radius: 4px;
+    margin: 2px 0;
+    overflow: hidden;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    transition: all 0.2s ease;
+  }
+
+  .tool-card.pending {
+    border-left: 3px solid #f59e0b;
+  }
+
+  .tool-card.success {
+    border-left: 3px solid #10b981;
+  }
+
+  .tool-card.error {
+    border-left: 3px solid #dc2626;
+  }
+
+  .tool-card-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    cursor: pointer;
+    background: #f8fafc;
+    transition: background 0.15s ease;
+  }
+
+  .tool-card-header:hover {
+    background: #f1f5f9;
+  }
+
+  .tool-card.expanded .tool-card-header {
+    border-bottom: 1px solid #e2e8f0;
+  }
+
+  .tool-card .tool-status-icon {
+    flex-shrink: 0;
+    font-size: 12px;
+  }
+
+  .tool-card .tool-name-badge {
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: #3b82f6;
+    color: white;
+  }
+
+  .tool-card .tool-summary {
+    flex: 1;
+    font-family: 'Monaco', 'Courier New', monospace;
+    font-size: 11px;
+    color: #475569;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .tool-card .tool-duration {
+    flex-shrink: 0;
+    font-size: 9px;
+    color: #94a3b8;
+    font-weight: 500;
+  }
+
+  .tool-card .tool-expand-icon {
+    flex-shrink: 0;
+    font-size: 10px;
+    color: #94a3b8;
+    transition: transform 0.2s ease;
+  }
+
+  .tool-card.expanded .tool-expand-icon {
+    transform: rotate(180deg);
+  }
+
+  .tool-card-body {
+    padding: 6px 8px;
+    background: #ffffff;
+  }
+
+  .tool-card-body .tool-section {
+    margin-bottom: 6px;
+  }
+
+  .tool-card-body .tool-section:last-child {
+    margin-bottom: 0;
+  }
+
+  .tool-card-body .tool-section-label {
+    font-size: 8px;
+    font-weight: 600;
+    color: #94a3b8;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 2px;
+  }
+
+  .tool-card-body pre {
+    margin: 0;
+    padding: 4px 6px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 3px;
+    font-family: 'Monaco', 'Courier New', monospace;
+    font-size: 10px;
+    line-height: 1.3;
+    overflow-x: auto;
+    max-height: 100px;
+    overflow-y: auto;
+    color: #334155;
+  }
+
+  .tool-card-body pre code {
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: #334155;
+  }
+
+  /* Tool name badge colors by type */
+  .tool-card .tool-name-badge[data-tool="Read"],
+  .tool-card .tool-name-badge[data-tool="Write"],
+  .tool-card .tool-name-badge[data-tool="Edit"] {
+    background: #f59e0b;
+  }
+
+  .tool-card .tool-name-badge[data-tool="Bash"] {
+    background: #dc2626;
+  }
+
+  .tool-card .tool-name-badge[data-tool="Glob"],
+  .tool-card .tool-name-badge[data-tool="Grep"] {
+    background: #8b5cf6;
+  }
+
+  .tool-card .tool-name-badge[data-tool="WebFetch"],
+  .tool-card .tool-name-badge[data-tool="WebSearch"] {
+    background: #06b6d4;
+  }
+
+  .tool-card .tool-name-badge[data-tool="TodoWrite"] {
+    background: #10b981;
+  }
+
+  /* Spinner for pending status */
+  .tool-status-spinner {
+    width: 12px;
+    height: 12px;
+    border: 2px solid #e5e7eb;
+    border-top: 2px solid #f59e0b;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+
+  /* Active Tools Section - shows pending operations immediately */
+  .active-tools-section {
+    position: sticky;
+    bottom: 0;
+    background: linear-gradient(180deg, rgba(255,251,235,0.95) 0%, #fffbeb 100%);
+    border-top: 1px solid #fbbf24;
+    padding: 6px 8px;
+    backdrop-filter: blur(4px);
+  }
+
+  .active-tool-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 11px;
+    color: #92400e;
+  }
+
+  .active-tool-item:not(:last-child) {
+    border-bottom: 1px dashed #fcd34d;
+    padding-bottom: 6px;
+    margin-bottom: 2px;
+  }
+
+  .active-tool-spinner {
+    width: 14px;
+    height: 14px;
+    border: 2px solid #fcd34d;
+    border-top: 2px solid #f59e0b;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    flex-shrink: 0;
+  }
+
+  .active-tool-name {
+    font-weight: 600;
+    font-size: 10px;
+    padding: 2px 6px;
+    border-radius: 3px;
+    background: #f59e0b;
+    color: white;
+    flex-shrink: 0;
+  }
+
+  /* Active tool name colors by type */
+  .active-tool-name[data-tool="Read"],
+  .active-tool-name[data-tool="Write"],
+  .active-tool-name[data-tool="Edit"] {
+    background: #f59e0b;
+  }
+
+  .active-tool-name[data-tool="Bash"] {
+    background: #dc2626;
+  }
+
+  .active-tool-name[data-tool="Glob"],
+  .active-tool-name[data-tool="Grep"] {
+    background: #8b5cf6;
+  }
+
+  .active-tool-name[data-tool="WebFetch"],
+  .active-tool-name[data-tool="WebSearch"] {
+    background: #06b6d4;
+  }
+
+  .active-tool-name[data-tool="Task"] {
+    background: #3b82f6;
+  }
+
+  .active-tool-summary {
+    flex: 1;
+    font-family: 'Monaco', 'Courier New', monospace;
+    font-size: 11px;
+    color: #78350f;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 `
