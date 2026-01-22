@@ -5,16 +5,6 @@
 
 import { css } from 'lit'
 
-// Configuration constants for animations
-export const ANIMATION_CONFIG = {
-  DURATIONS: {
-    GRADIENT_SHIFT: '7.3s',
-    GLOWING_AURA: '9.7s',
-    ROTATE_MIST: '13.5s',
-    BLINK_EYE: '5s'
-  }
-} as const
-
 // Combined styles for the toolbar as CSSResult
 export const TOOLBAR_STYLES = css`
   :host {
@@ -29,6 +19,14 @@ export const TOOLBAR_STYLES = css`
     --color-text-muted: #64748b;
     --color-bg-light: #f8fafc;
     --color-white: #ffffff;
+
+    /* Tool Colors */
+    --color-tool-file: #f59e0b;
+    --color-tool-bash: #dc2626;
+    --color-tool-search: #8b5cf6;
+    --color-tool-web: #06b6d4;
+    --color-tool-todo: #10b981;
+    --color-tool-task: #3b82f6;
     
     position: fixed;
     bottom: 5px;
@@ -334,6 +332,31 @@ export const TOOLBAR_STYLES = css`
 
   .copy-button:active { background: #6d28d9; }
 
+  .shortcuts-button,
+  .settings-button {
+    background: #374151;
+    border: 1px solid #4b5563;
+    color: var(--color-white);
+    padding: 4px 6px;
+    min-width: 26px;
+  }
+
+  .shortcuts-button:hover,
+  .settings-button:hover {
+    background: #4b5563;
+    box-shadow: 0 2px 4px rgba(55, 65, 81, 0.2);
+  }
+
+  .shortcuts-button:active,
+  .settings-button:active {
+    background: #374151;
+  }
+
+  .shortcuts-button svg,
+  .settings-button svg {
+    display: block;
+  }
+
   .inspecting .close-button {
     display: inline-flex;
   }
@@ -616,11 +639,6 @@ export const TOOLBAR_STYLES = css`
     display: block;
   }
 
-  @keyframes pulse {
-    0%, 100% { opacity: 0.8; }
-    50% { opacity: 1; }
-  }
-
   .processing-dots {
     display: inline-block;
     animation: dots 1.5s infinite;
@@ -651,11 +669,6 @@ export const TOOLBAR_STYLES = css`
     border-top: 2px solid #d97706;
     border-radius: 50%;
     animation: spin 1s linear infinite;
-  }
-
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
   }
 
   .processing-text {
@@ -830,25 +843,25 @@ export const TOOLBAR_STYLES = css`
   .tool-card .tool-name-badge[data-tool="Read"],
   .tool-card .tool-name-badge[data-tool="Write"],
   .tool-card .tool-name-badge[data-tool="Edit"] {
-    background: #f59e0b;
+    background: var(--color-tool-file);
   }
 
   .tool-card .tool-name-badge[data-tool="Bash"] {
-    background: #dc2626;
+    background: var(--color-tool-bash);
   }
 
   .tool-card .tool-name-badge[data-tool="Glob"],
   .tool-card .tool-name-badge[data-tool="Grep"] {
-    background: #8b5cf6;
+    background: var(--color-tool-search);
   }
 
   .tool-card .tool-name-badge[data-tool="WebFetch"],
   .tool-card .tool-name-badge[data-tool="WebSearch"] {
-    background: #06b6d4;
+    background: var(--color-tool-web);
   }
 
   .tool-card .tool-name-badge[data-tool="TodoWrite"] {
-    background: #10b981;
+    background: var(--color-tool-todo);
   }
 
   /* Spinner for pending status */
@@ -910,25 +923,25 @@ export const TOOLBAR_STYLES = css`
   .active-tool-name[data-tool="Read"],
   .active-tool-name[data-tool="Write"],
   .active-tool-name[data-tool="Edit"] {
-    background: #f59e0b;
+    background: var(--color-tool-file);
   }
 
   .active-tool-name[data-tool="Bash"] {
-    background: #dc2626;
+    background: var(--color-tool-bash);
   }
 
   .active-tool-name[data-tool="Glob"],
   .active-tool-name[data-tool="Grep"] {
-    background: #8b5cf6;
+    background: var(--color-tool-search);
   }
 
   .active-tool-name[data-tool="WebFetch"],
   .active-tool-name[data-tool="WebSearch"] {
-    background: #06b6d4;
+    background: var(--color-tool-web);
   }
 
   .active-tool-name[data-tool="Task"] {
-    background: #3b82f6;
+    background: var(--color-tool-task);
   }
 
   .active-tool-summary {

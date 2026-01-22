@@ -20,12 +20,16 @@ import { findNearestComponent } from './inspector/detectors'
 import { createLogger, type Logger } from './inspector/logger'
 import { TOOLBAR_STYLES } from './inspector/style'
 import { HtmlUtils } from './utils/html'
-import { 
-  initializeConsoleErrorCapture, 
-  captureConsoleErrors, 
-  captureConsoleWarnings, 
-  captureConsoleInfo 
+import {
+  initializeConsoleErrorCapture,
+  captureConsoleErrors,
+  captureConsoleWarnings,
+  captureConsoleInfo
 } from './inspector/console'
+
+// Import modal components
+import './inspector/keyboard-shortcuts-modal'
+import './inspector/settings-panel'
 
 // Configuration constants
 const CONFIG = {
@@ -88,6 +92,12 @@ export class InspectorToolbar extends LitElement {
   @state()
   private accessor toolCalls: Map<string, ToolCall> = new Map()
 
+  @state()
+  private accessor showShortcutsModal = false
+
+  @state()
+  private accessor showSettingsPanel = false
+
   // Computed: get pending tool calls for immediate display
   private get pendingToolCalls(): ToolCall[] {
     return Array.from(this.toolCalls.values()).filter(t => t.status === 'pending')
@@ -108,6 +118,14 @@ export class InspectorToolbar extends LitElement {
   private todoWriteToolIds = new Set<string>()
 
   static styles = TOOLBAR_STYLES
+
+  private formatTokenUsage(usage: { input_tokens?: number; output_tokens?: number; cache_read_input_tokens?: number }): string {
+    const tokens: string[] = []
+    if (usage.input_tokens) tokens.push(`${usage.input_tokens}↑`)
+    if (usage.output_tokens) tokens.push(`${usage.output_tokens}↓`)
+    if (usage.cache_read_input_tokens) tokens.push(`${usage.cache_read_input_tokens}(cached)`)
+    return tokens.join(' ')
+  }
 
   constructor() {
     super()
@@ -328,7 +346,6 @@ export class InspectorToolbar extends LitElement {
 
   private processToolResultBlocks(message: Extract<SendMessageResponse, { type: 'user' }>): void {
     const content = message.message.content || []
-    let hasUpdates = false
 
     content.forEach((block: any) => {
       if (block.type === 'tool_result' && block.tool_use_id) {
@@ -344,7 +361,6 @@ export class InspectorToolbar extends LitElement {
             endTime: Date.now()
           }
           this.toolCalls = new Map(this.toolCalls).set(block.tool_use_id, updated)
-          hasUpdates = true
         }
       }
     })
@@ -447,6 +463,26 @@ export class InspectorToolbar extends LitElement {
               <span>Cancel</span>
             </button>
           `)}
+          <button
+            class="action-button shortcuts-button"
+            @click=${() => this.showShortcutsModal = true}
+            title="Keyboard Shortcuts"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="2" y="4" width="20" height="16" rx="2"/>
+              <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10"/>
+            </svg>
+          </button>
+          <button
+            class="action-button settings-button"
+            @click=${() => this.showSettingsPanel = true}
+            title="Settings"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </button>
         </div>
 
         ${when(this.showInitiatingIndicator, () => html`
@@ -480,6 +516,20 @@ export class InspectorToolbar extends LitElement {
           </div>
         `)}
       </div>
+
+      <keyboard-shortcuts-modal
+        ?open=${this.showShortcutsModal}
+        @close=${() => this.showShortcutsModal = false}
+      ></keyboard-shortcuts-modal>
+
+      <settings-panel
+        ?open=${this.showSettingsPanel}
+        @close=${() => this.showSettingsPanel = false}
+        @open-shortcuts=${() => {
+          this.showSettingsPanel = false
+          this.showShortcutsModal = true
+        }}
+      ></settings-panel>
     `
   }
 
@@ -622,13 +672,9 @@ export class InspectorToolbar extends LitElement {
       metaInfo = `Model: ${assistantMessage.model}`
     }
     if (assistantMessage.usage) {
-      const usage = assistantMessage.usage
-      const tokens: string[] = []
-      if (usage.input_tokens) tokens.push(`${usage.input_tokens}↑`)
-      if (usage.output_tokens) tokens.push(`${usage.output_tokens}↓`)
-      if (usage.cache_read_input_tokens) tokens.push(`${usage.cache_read_input_tokens}(cached)`)
-      if (tokens.length > 0) {
-        const tokenInfo = `Tokens: ${tokens.join(' ')}`
+      const tokenStr = this.formatTokenUsage(assistantMessage.usage)
+      if (tokenStr) {
+        const tokenInfo = `Tokens: ${tokenStr}`
         metaInfo = metaInfo ? `${metaInfo} | ${tokenInfo}` : tokenInfo
       }
     }
@@ -678,13 +724,9 @@ export class InspectorToolbar extends LitElement {
       }
 
       if (message.usage) {
-        const usage = message.usage
-        const tokens: string[] = []
-        if (usage.input_tokens) tokens.push(`${usage.input_tokens}↑`)
-        if (usage.output_tokens) tokens.push(`${usage.output_tokens}↓`)
-        if (usage.cache_read_input_tokens) tokens.push(`${usage.cache_read_input_tokens}(cached)`)
-        if (tokens.length > 0) {
-          content += `<strong>Tokens:</strong> ${tokens.join(' ')}<br>`
+        const tokenStr = this.formatTokenUsage(message.usage)
+        if (tokenStr) {
+          content += `<strong>Tokens:</strong> ${tokenStr}<br>`
         }
       }
 
@@ -699,13 +741,9 @@ export class InspectorToolbar extends LitElement {
       // Build meta information with token usage
       let metaInfo = ''
       if (message.usage) {
-        const usage = message.usage
-        const tokens: string[] = []
-        if (usage.input_tokens) tokens.push(`${usage.input_tokens}↑`)
-        if (usage.output_tokens) tokens.push(`${usage.output_tokens}↓`)
-        if (usage.cache_read_input_tokens) tokens.push(`${usage.cache_read_input_tokens}(cached)`)
-        if (tokens.length > 0) {
-          metaInfo = `Tokens: ${tokens.join(' ')}`
+        const tokenStr = this.formatTokenUsage(message.usage)
+        if (tokenStr) {
+          metaInfo = `Tokens: ${tokenStr}`
         }
       }
 
@@ -738,10 +776,6 @@ export class InspectorToolbar extends LitElement {
   }
 
   private renderMessage(message: SendMessageResponse) {
-    if (!this.shouldShowMessage(message)) {
-      return nothing
-    }
-
     let content = ''
     let badge = ''
     let meta = ''
@@ -1044,15 +1078,14 @@ export class InspectorToolbar extends LitElement {
     })
   }
 
-  private showCopyFeedback() {
-    // Create temporary visual feedback
+  private showFeedback(message: string, backgroundColor: string) {
     const feedback = document.createElement('div')
-    feedback.textContent = 'Copied to clipboard!'
+    feedback.textContent = message
     feedback.style.cssText = `
       position: fixed;
       top: 20px;
       right: 20px;
-      background: #28a745;
+      background: ${backgroundColor};
       color: white;
       padding: 8px 16px;
       border-radius: 4px;
@@ -1081,26 +1114,12 @@ export class InspectorToolbar extends LitElement {
     setTimeout(() => feedback.remove(), 2000)
   }
 
-  private showCopyError() {
-    // Create temporary error feedback
-    const feedback = document.createElement('div')
-    feedback.textContent = 'Failed to copy to clipboard'
-    feedback.style.cssText = `
-      position: fixed;
-      top: 20px;
-      right: 20px;
-      background: #dc3545;
-      color: white;
-      padding: 8px 16px;
-      border-radius: 4px;
-      font-size: 14px;
-      z-index: 10000;
-      pointer-events: none;
-      animation: fadeInOut 2s ease-in-out;
-    `
+  private showCopyFeedback() {
+    this.showFeedback('Copied to clipboard!', '#28a745')
+  }
 
-    document.body.appendChild(feedback)
-    setTimeout(() => feedback.remove(), 2000)
+  private showCopyError() {
+    this.showFeedback('Failed to copy to clipboard', '#dc3545')
   }
 
   private async handlePromptSubmit(prompt: string): Promise<void> {
@@ -1226,7 +1245,7 @@ export class InspectorToolbar extends LitElement {
 
       const messageHandler: AIMessageHandler = {
         onData: (data: SendMessageResponse) => {
-          console.log(JSON.stringify(data))
+          this.logger.log('AI message received:', JSON.stringify(data))
 
           // Update session ID from message
           if (data.session_id) {
@@ -1253,7 +1272,6 @@ export class InspectorToolbar extends LitElement {
         },
         onError: (error) => {
           this.logger.error('AI subscription error:', error)
-          console.log('error: Failed to send message')
           this.setProcessingState(false)
         },
         onComplete: () => {
@@ -1326,11 +1344,6 @@ export class InspectorToolbar extends LitElement {
     }
   }
 
-  private shouldShowMessage(jsonData: SendMessageResponse): boolean {
-    // Always show all messages - no deduplication needed
-    return true
-  }
-
   private renderTodos(todos: Array<{ id: string, content: string, status: string }>): string {
     if (!Array.isArray(todos)) {
       return '<strong>TodoWrite</strong>\nInvalid todos format'
@@ -1363,15 +1376,6 @@ export class InspectorToolbar extends LitElement {
     }
   }
 
-  private getStatusColor(status: string): string {
-    switch (status) {
-      case 'completed': return '#28a745'
-      case 'in_progress': return '#007acc'
-      case 'pending': return '#ffc107'
-      default: return '#6c757d'
-    }
-  }
-
   private getBadgeClass(badge: string): string {
     const lowerBadge = badge.toLowerCase()
 
@@ -1397,13 +1401,6 @@ export class InspectorToolbar extends LitElement {
 
     // Default for unknown badges
     return 'badge-default'
-  }
-
-  private formatMessage(content: string, badge?: string, meta?: string): string {
-    const badgeClass = this.getBadgeClass(badge || '')
-    const badgeHtml = badge ? `<span class="badge ${badgeClass}">${badge}</span>` : ''
-    const metaHtml = meta ? `<small class="meta">${meta}</small>` : ''
-    return `${badgeHtml}<div class="message-content">${content}</div>${metaHtml}`
   }
 
 }
