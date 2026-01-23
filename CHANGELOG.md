@@ -1,5 +1,21 @@
 # Changelog
 
+## [2.0.0](https://github.com/nguyenvanduocit/instantCode/compare/v1.2.0...v2.0.0) (2026-01-23)
+
+
+### ⚠ BREAKING CHANGES
+
+* Removed tRPC dependency and related endpoints
+
+### Features
+
+* **inspector:** add settings panel, keyboard shortcuts modal, and landing page ([b18fc78](https://github.com/nguyenvanduocit/instantCode/commit/b18fc786350c4f6d44f801425617ac04ef647707))
+
+
+### Code Refactoring
+
+* replace tRPC with Socket.IO RPC architecture ([2af2466](https://github.com/nguyenvanduocit/instantCode/commit/2af246646576b56b9ec285395b69d1e4ed7e2da9))
+
 ## [1.2.0](https://github.com/nguyenvanduocit/instantCode/compare/v1.1.0...v1.2.0) (2025-12-26)
 
 
