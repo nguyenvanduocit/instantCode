@@ -20,7 +20,7 @@ export function createInspectionManager(
 
   function addInspectionStyles(): void {
     inspectionStyleElement = document.createElement('style')
-    inspectionStyleElement.id = 'inspector-toolbar-styles'
+    inspectionStyleElement.id = 'annotator-toolbar-styles'
     inspectionStyleElement.textContent = `
       * {
         cursor: crosshair !important;

@@ -1,7 +1,36 @@
 #!/usr/bin/env node
 
-import { startServer, stopServer, type ServerInstance } from './trpc-server'
-import { execSync } from 'child_process'
+import { startServer, stopServer, type ServerInstance } from './ws-server'
+import { createServer } from 'net'
+import { readFileSync, existsSync } from 'fs'
+import { join } from 'path'
+
+// Read version from package.json
+function getVersion(): string {
+  // Try multiple possible locations for package.json
+  const possiblePaths = [
+    join(__dirname, '..', 'package.json'),  // From dist/
+    join(__dirname, 'package.json'),        // Same directory
+    join(process.cwd(), 'package.json'),    // Current working directory
+  ]
+
+  for (const pkgPath of possiblePaths) {
+    if (existsSync(pkgPath)) {
+      try {
+        const pkg = JSON.parse(readFileSync(pkgPath, 'utf-8'))
+        if (pkg.name === 'instantcode' && pkg.version) {
+          return pkg.version
+        }
+      } catch {
+        continue
+      }
+    }
+  }
+
+  return '0.0.0' // Fallback version
+}
+
+const VERSION = getVersion()
 
 let serverInstance: ServerInstance | null = null
 let isShuttingDown = false
@@ -43,9 +72,9 @@ Examples:
 
 Getting Started:
   1. Run this command to start the server
-  2. Add this script tag to your webpage:
-     <script src="http://localhost:7318/inspector-toolbar.js"></script>
-  3. Refresh your page and start inspecting elements!
+  2. Add the MCP config to ~/.claude/settings.json (shown on startup)
+  3. For non-Vite projects, add to your webpage:
+     <script src="http://localhost:7318/annotator-toolbar.js"></script>
 
 Learn more: https://github.com/nguyenvanduocit/instantCode
 `)
@@ -53,7 +82,7 @@ Learn more: https://github.com/nguyenvanduocit/instantCode
 }
 
 if (versionFlag) {
-  console.log('InstantCode v1.0.0')
+  console.log(`InstantCode v${VERSION}`)
   process.exit(0)
 }
 
@@ -114,58 +143,45 @@ if (!publicAddress) {
   publicAddress = `http://${listenAddress}:${port}`
 }
 
-function checkClaudeCodeInstallation(): boolean {
-  // Add common Claude Code installation paths to PATH for this check
-  const homedir = process.env.HOME || process.env.USERPROFILE || ''
-  const additionalPaths = [
-    `${homedir}/.bun/bin`,
-    `${homedir}/.local/bin`,
-    '/usr/local/bin',
-  ].join(':')
-
-  const pathEnv = process.env.PATH ? `${additionalPaths}:${process.env.PATH}` : additionalPaths
-
-  try {
-    execSync('claude --version', {
-      stdio: 'pipe',
-      env: { ...process.env, PATH: pathEnv }
+function checkPortAvailability(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = createServer()
+    server.once('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        resolve(false)
+      } else {
+        resolve(true) // Other errors, assume port is available
+      }
     })
-    return true
-  } catch (error) {
-    return false
-  }
-}
-
-function showClaudeCodeInstallationInstructions(): void {
-  console.log('')
-  console.log('❌ Claude Code is not installed or not available in PATH')
-  console.log('')
-  console.log('🔧 Installation Instructions:')
-  console.log('')
-  console.log('Option 2 - Install globally with Bun:')
-  console.log('  bun install -g @anthropic-ai/claude-code')
-  console.log('')
-  console.log('After installation, verify with:')
-  console.log('  claude --version')
-  console.log('')
-  console.log('📚 For more installation options and troubleshooting:')
-  console.log('  https://docs.anthropic.com/en/docs/claude-code')
-  console.log('')
+    server.once('listening', () => {
+      server.close()
+      resolve(true)
+    })
+    server.listen(port)
+  })
 }
 
 async function main() {
   try {
-    // Check if Claude Code is installed
-    if (!checkClaudeCodeInstallation()) {
-      showClaudeCodeInstallationInstructions()
+    // Check port availability before starting server
+    const isPortAvailable = await checkPortAvailability(port)
+    if (!isPortAvailable) {
+      console.error(`❌ Port ${port} is already in use. Please choose a different port using --port flag.`)
       process.exit(1)
     }
 
     serverInstance = await startServer(port, listenAddress, publicAddress, isVerbose)
-    console.log(`✅ Server listening on ${listenAddress}:${port}`)
-    console.log(`🌐 Public address: ${publicAddress}`)
-    console.log(`📋 Add to your webpage: <script src="${publicAddress}/inspector-toolbar.js"></script>`)
-    console.log(`⏹️  Ctrl+C to stop`)
+
+    // Show MCP configuration for Claude Code
+    console.log(`✅ InstantCode server started`)
+    console.log(``)
+    console.log(`📋 Add to Claude Code settings (~/.claude/settings.json):`)
+    console.log(``)
+    console.log(`  "mcpServers": {`)
+    console.log(`    "instantcode": {`)
+    console.log(`      "url": "${publicAddress}/mcp"`)
+    console.log(`    }`)
+    console.log(`  }`)
   } catch (error: any) {
     console.error('❌ Failed to start server:', error.message)
     process.exit(1)

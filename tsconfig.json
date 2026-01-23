@@ -26,6 +26,7 @@
   "exclude": [
     "node_modules",
     "dist",
-    "src/inspector-toolbar.ts"
+    "src/inspector-toolbar.ts",
+    "src/rpc/define.ts"
   ]
 }

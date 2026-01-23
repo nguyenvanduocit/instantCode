@@ -2,7 +2,7 @@
  * Framework component detection and file location extraction
  */
 
-import { createLogger } from './logger'
+import { createLogger } from '../utils/logger'
 import { XPathUtils, ElementSelector } from '../utils/xpath'
 
 export interface ComponentInfo {
@@ -355,7 +355,7 @@ function getVueComponentInfo(element: Element): ComponentInfo | null {
   }
 
   // Try to extract element-specific location information
-  const elementLocationInfo = extractVueElementLocation(element, vnode, vueInstance)
+  const elementLocationInfo = extractVueElementLocation(element, vnode)
   if (elementLocationInfo) {
     Object.assign(componentInfo, elementLocationInfo)
   }
@@ -366,7 +366,7 @@ function getVueComponentInfo(element: Element): ComponentInfo | null {
 /**
  * Extract element-specific location data from Vue internals
  */
-function extractVueElementLocation(element: Element, vnode: any, _vueInstance: any): Partial<ComponentInfo> | null {
+function extractVueElementLocation(element: Element, vnode: any): Partial<ComponentInfo> | null {
   try {
     const locationInfo: Partial<ComponentInfo> = {}
 
@@ -391,7 +391,7 @@ function extractVueElementLocation(element: Element, vnode: any, _vueInstance: a
     }
 
     // Look for source map information
-    const sourceMapInfo = extractVueSourceMap(vnode, _vueInstance)
+    const sourceMapInfo = extractVueSourceMap(vnode)
     if (sourceMapInfo) {
       locationInfo.sourceMap = sourceMapInfo
     }
@@ -440,7 +440,7 @@ function buildVueSourceHierarchy(element: Element, vnode: any): string | null {
 /**
  * Extract source map information from Vue internals
  */
-function extractVueSourceMap(vnode: any, _vueInstance: any): ComponentInfo['sourceMap'] | null {
+function extractVueSourceMap(vnode: any): ComponentInfo['sourceMap'] | null {
   try {
     // Look for source map data in Vue internals
     // This is framework-specific and may vary by Vue version
@@ -452,7 +452,7 @@ function extractVueSourceMap(vnode: any, _vueInstance: any): ComponentInfo['sour
         originalName: vnode.__source.name
       }
     }
-    
+
     return null
   } catch (error) {
     return null

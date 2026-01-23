@@ -1,10 +1,10 @@
-import type { Plugin, ResolvedConfig } from 'vite';
+import type { Plugin, ViteDevServer } from 'vite';
 import { spawn, ChildProcess } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { existsSync } from 'node:fs';
 
-export interface InspectorPluginOptions {
+export interface AnnotatorPluginOptions {
   /**
    * Port to run the server on
    * @default 7318
@@ -27,13 +27,13 @@ export interface InspectorPluginOptions {
   verbose?: boolean;
 }
 
-class InspectorServerManager {
+class AnnotatorServerManager {
   private serverProcess: ChildProcess | null = null;
-  private options: Required<InspectorPluginOptions>;
+  private options: Required<AnnotatorPluginOptions>;
   private packageDir: string;
   private isDevelopment: boolean;
 
-  constructor(options: InspectorPluginOptions = {}) {
+  constructor(options: AnnotatorPluginOptions = {}) {
     const port = options.port ?? 7318;
     const listenAddress = options.listenAddress ?? 'localhost';
     
@@ -70,6 +70,13 @@ class InspectorServerManager {
       return;
     }
 
+    // Check if server is already running on the port
+    const isRunning = await this.isServerRunning();
+    if (isRunning) {
+      this.log(`Server already running on port ${this.options.port}, skipping spawn`);
+      return;
+    }
+
     // Determine the server file to run
     let serverFile: string;
     let cmd: string;
@@ -93,7 +100,7 @@ class InspectorServerManager {
           cmd = 'bun';
           args = [serverFile];
         } else {
-          throw new Error(`Inspector server file not found at ${serverFile} or ${fallbackFile}`);
+          throw new Error(`Annotator server file not found at ${serverFile} or ${fallbackFile}`);
         }
       } else {
         // Use node for compiled CJS in production
@@ -105,14 +112,12 @@ class InspectorServerManager {
     // Add CLI arguments
     args.push('--port', String(this.options.port));
     args.push('--listen', this.options.listenAddress);
-    if (this.options.publicAddress ?? `http://${this.options.listenAddress}:${this.options.port}`) {
-      args.push('--public-address', this.options.publicAddress);
-    }
+    args.push('--public-address', this.options.publicAddress);
     if (this.options.verbose) {
       args.push('--verbose');
     }
 
-    this.log(`Starting inspector server: ${cmd} ${args.join(' ')}`);
+    this.log(`Starting annotator server: ${cmd} ${args.join(' ')}`);
     this.log(`Working directory: ${this.packageDir}`);
 
     // Start the server process
@@ -130,17 +135,17 @@ class InspectorServerManager {
 
     if (!this.options.verbose && this.serverProcess.stderr) {
       this.serverProcess.stderr.on('data', (data) => {
-        console.error(`[inspector-server] Error: ${data}`);
+        console.error(`[annotator-server] Error: ${data}`);
       });
     }
 
     this.serverProcess.on('error', (error) => {
-      console.error('[inspector-server] Failed to start:', error);
+      console.error('[annotator-server] Failed to start:', error);
     });
 
     this.serverProcess.on('exit', (code) => {
       if (code !== 0 && code !== null) {
-        console.error(`[inspector-server] Process exited with code ${code}`);
+        console.error(`[annotator-server] Process exited with code ${code}`);
       }
       this.serverProcess = null;
     });
@@ -151,7 +156,7 @@ class InspectorServerManager {
 
   async stop(): Promise<void> {
     if (this.serverProcess) {
-      this.log('Stopping inspector server...');
+      this.log('Stopping annotator server...');
 
       // Send SIGTERM for graceful shutdown
       this.serverProcess.kill('SIGTERM');
@@ -166,7 +171,7 @@ class InspectorServerManager {
         const timeout = setTimeout(() => {
           // Force kill if not exited after 5 seconds
           if (this.serverProcess) {
-            this.log('Force killing inspector server...');
+            this.log('Force killing annotator server...');
             this.serverProcess.kill('SIGKILL');
           }
           resolve();
@@ -183,18 +188,25 @@ class InspectorServerManager {
   }
 
 
-  private log(message: string): void {
-    if (this.options.verbose) {
-      console.log(`[inspector-plugin] ${message}`);
+  private async isServerRunning(): Promise<boolean> {
+    try {
+      const response = await fetch(`http://${this.options.listenAddress}:${this.options.port}/health`, {
+        signal: AbortSignal.timeout(1000),
+      });
+      return response.ok;
+    } catch {
+      return false;
     }
   }
 
-  getInjectScript(cwd?: string): string {
-    const params = new URLSearchParams({
-      ...(cwd && { cwd }),
-    });
+  private log(message: string): void {
+    if (this.options.verbose) {
+      console.log(`[annotator-plugin] ${message}`);
+    }
+  }
 
-    return `<script src="${this.options.publicAddress}/inspector-toolbar.js?${params}" type="module" async></script>`;
+  getInjectScript(): string {
+    return `<script src="${this.options.publicAddress}/annotator-toolbar.js" type="module" async></script>`;
   }
 
   shouldInject(): boolean {
@@ -203,41 +215,85 @@ class InspectorServerManager {
 
 }
 
-export function inspectorPlugin(options: InspectorPluginOptions = {}): Plugin {
-  let serverManager: InspectorServerManager;
-  let projectRoot: string;
+function injectScriptIntoHtml(html: string, scriptTag: string): string {
+  if (html.includes('</body>')) {
+    return html.replace('</body>', `${scriptTag}\n</body>`);
+  } else if (html.includes('</html>')) {
+    return html.replace('</html>', `${scriptTag}\n</html>`);
+  }
+  return html + scriptTag;
+}
+
+export function annotatorPlugin(options: AnnotatorPluginOptions = {}): Plugin {
+  let serverManager: AnnotatorServerManager;
 
   return {
-    name: 'vite-plugin-inspector',
+    name: 'vite-plugin-annotator',
     // Only apply plugin during development (serve command)
     apply: 'serve',
 
-    configResolved(config: ResolvedConfig) {
-      projectRoot = config.root;
-      serverManager = new InspectorServerManager(options);
+    configResolved() {
+      serverManager = new AnnotatorServerManager(options);
     },
 
     async buildStart() {
       await serverManager.start();
     },
 
+    // For regular Vite apps (SPA)
     transformIndexHtml(html: string) {
       if (!serverManager || !serverManager.shouldInject()) {
         return html;
       }
+      return injectScriptIntoHtml(html, serverManager.getInjectScript());
+    },
 
-      // Inject the inspector toolbar script into the HTML
-      const scriptTag = serverManager.getInjectScript(projectRoot);
+    // For SSR frameworks like Nuxt - intercept HTML responses
+    configureServer(server: ViteDevServer) {
+      server.middlewares.use((_req, res, next) => {
+        if (!serverManager || !serverManager.shouldInject()) {
+          return next();
+        }
 
-      // Try to inject before closing body tag, or at the end of HTML
-      if (html.includes('</body>')) {
-        return html.replace('</body>', `${scriptTag}\n</body>`);
-      } else if (html.includes('</html>')) {
-        return html.replace('</html>', `${scriptTag}\n</html>`);
-      } else {
-        // Append to the end if no body or html tags found
-        return html + scriptTag;
-      }
+        // Only intercept HTML responses
+        const originalWrite = res.write.bind(res);
+        const originalEnd = res.end.bind(res);
+        let chunks: Buffer[] = [];
+        let isHtml = false;
+
+        res.write = function(chunk: any, ...args: any[]) {
+          // Check content-type on first write
+          const contentType = res.getHeader('content-type');
+          if (typeof contentType === 'string' && contentType.includes('text/html')) {
+            isHtml = true;
+          }
+
+          if (isHtml && chunk) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+            return true;
+          }
+          return originalWrite(chunk, ...args);
+        } as any;
+
+        res.end = function(chunk?: any, ...args: any[]) {
+          if (chunk) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          }
+
+          if (isHtml && chunks.length > 0) {
+            const html = Buffer.concat(chunks).toString('utf-8');
+            const injectedHtml = injectScriptIntoHtml(html, serverManager.getInjectScript());
+
+            // Update content-length header
+            res.setHeader('content-length', Buffer.byteLength(injectedHtml));
+            return originalEnd(injectedHtml, ...args);
+          }
+
+          return originalEnd(chunk, ...args);
+        } as any;
+
+        next();
+      });
     },
 
     async closeBundle() {
@@ -254,4 +310,4 @@ export function inspectorPlugin(options: InspectorPluginOptions = {}): Plugin {
 }
 
 // Default export for convenience
-export default inspectorPlugin;
+export default annotatorPlugin;

@@ -5,9 +5,9 @@ const fs = require('fs')
 const rootDir = path.join(__dirname, '..')
 
 esbuild.build({
-  entryPoints: [path.join(rootDir, 'src/inspector-toolbar.ts')],
+  entryPoints: [path.join(rootDir, 'src/annotator-toolbar.ts')],
   bundle: true,
-  outfile: path.join(rootDir, 'dist/inspector-toolbar.js'),
+  outfile: path.join(rootDir, 'dist/annotator-toolbar.js'),
   platform: 'browser',
   target: 'es2020',
   format: 'iife',
